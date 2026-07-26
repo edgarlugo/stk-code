@@ -39,7 +39,9 @@
 #ifndef WIN32
 #  include <sys/param.h>    // To get BSD macro
 #  ifndef __SWITCH__
+#    ifndef __VITA__
 #      include <sys/utsname.h>
+#    endif
 #  endif
 #endif
 #if defined(__APPLE__) || (defined(BSD) && !defined(__gnu_hurd__))

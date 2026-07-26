@@ -45,7 +45,9 @@
 #  include <iphlpapi.h>
 #else
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <ifaddrs.h>
+#endif
 #else
 extern "C" {
   #define u64 uint64_t
@@ -61,7 +63,9 @@ extern "C" {
   #undef s64
 }
 #endif
+#ifndef __VITA__
 #  include <net/if.h>
+#endif
 #endif
 
 static ServersManager* g_manager_singleton(NULL);
@@ -425,6 +429,8 @@ std::vector<SocketAddress> ServersManager::getBroadcastAddresses(bool ipv6)
         Log::warn("ServersManager", "Failed to get broadcast address! Error 0x%x", resultCode);
         result = getDefaultBroadcastAddresses();
     }
+#elif defined(__VITA__)
+    result = getDefaultBroadcastAddresses();
 #elif !defined(WIN32)
     struct ifaddrs *addresses, *p;
 

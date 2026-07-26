@@ -27,7 +27,9 @@
 #  include <iphlpapi.h>
 #else
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <ifaddrs.h>
+#endif
 #else
 extern "C" {
   #define u64 uint64_t
@@ -41,8 +43,10 @@ extern "C" {
   #undef s64
 }
 #endif
+#ifndef __VITA__
 #  include <sys/ioctl.h>
 #  include <net/if.h>
+#endif
 #  include <string.h>
 #  include <errno.h>
 #endif
@@ -102,6 +106,8 @@ SocketAddress::SocketAddress(const ENetAddress& ea)
 #else
     m_family = AF_INET;
 #ifdef __SWITCH__
+    setIP(htonl(ea.host.p0));
+#elif defined(__VITA__)
     setIP(htonl(ea.host.p0));
 #else
     setIP(htonl(ea.host));
@@ -210,9 +216,15 @@ void SocketAddress::init(const std::string& str, uint16_t port_number,
 #else
         if (!g_ignore_error_message)
         {
+#if defined(__VITA__)
+            Log::error("SocketAddress", "Error in getaddrinfo for "
+                "SocketAddress (str constructor) %s: status %d",
+                str.c_str(), status);
+#else
             Log::error("SocketAddress", "Error in getaddrinfo for "
                 "SocketAddress (str constructor) %s: %s",
                 str.c_str(), gai_strerror(status));
+#endif
         }
 #endif
         return;
@@ -251,7 +263,11 @@ void SocketAddress::init(const std::string& str, uint16_t port_number,
         if (found)
             break;
     }
+#if defined(__VITA__)
+    freeaddrinfo_compat(res);
+#else
     freeaddrinfo(res);
+#endif
 }   // init
 
 // ----------------------------------------------------------------------------
@@ -340,6 +356,9 @@ bool SocketAddress::isPublicAddressLocalhost() const
         else if(currentIp)
             return htonl(currentIp) == getIP();
     }
+    return false;
+#elif defined(__VITA__)
+    // FIXME: implement via sceNetCtlInetGetInfo.
     return false;
 #elif !defined(WIN32)
     struct ifaddrs *addresses, *p;
@@ -744,7 +763,7 @@ ENetAddress SocketAddress::toENetAddress() const
 {
     ENetAddress ea = {};
     uint32_t ip = getIP();
-#if defined(ENABLE_IPV6) || defined(__SWITCH__)
+#if defined(ENABLE_IPV6) || defined(__SWITCH__) || defined(__VITA__)
     if (isIPv6Socket())
     {
         struct sockaddr_in6* in6 = (struct sockaddr_in6*)m_sockaddr.data();

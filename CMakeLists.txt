@@ -1,5 +1,26 @@
 cmake_minimum_required(VERSION 3.12...4.0)
 
+if(USE_VITA)
+if(NOT DEFINED ENV{VITASDK})
+    message(FATAL_ERROR "Please define VITASDK environment variable (source /path/to/vitasdk/vitasdk.sh)")
+endif()
+
+set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+
+add_compile_options(-Wl,-q -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -fno-optimize-sibling-calls)
+
+set(CMAKE_FIND_ROOT_PATH
+  $ENV{VITASDK}/arm-vita-eabi
+  $ENV{VITASDK}
+)
+
+find_program(PKG_CONFIG_EXECUTABLE NAMES arm-vita-eabi-pkg-config HINTS "$ENV{VITASDK}/bin")
+
+set(NVITA TRUE)
+set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
+set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+endif()
+
 # root CMakeLists for the SuperTuxKart project
 project(SuperTuxKart)
 set(PROJECT_VERSION "git")
@@ -16,6 +37,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 CMAKE_DEPENDENT_OPTION(USE_SWITCH "Build targeting switch" OFF "NOT NINTENDO_SWITCH" ON)
+CMAKE_DEPENDENT_OPTION(USE_VITA "Build targeting PS Vita" OFF "NOT NVITA" ON)
 
 if(WIN32)
     option(USE_DIRECTX "Build DirectX 9 driver (requires DirectX SDK)" OFF)
@@ -27,7 +49,7 @@ option(USE_SYSTEM_ANGELSCRIPT "Use system angelscript instead of built-in angels
 option(USE_SYSTEM_ENET "Use system ENet instead of the built-in version, when available." ON)
 option(USE_SYSTEM_MCPP "Use system mcpp instead of the built-in version, when available." ON)
 CMAKE_DEPENDENT_OPTION(USE_IPV6 "Allow create or connect to game server with IPv6 address, system enet will not be used." ON
-  "NOT USE_SWITCH" OFF)
+  "NOT USE_SWITCH;NOT USE_VITA" OFF)
 option(USE_SYSTEM_WIIUSE "Use system WiiUse instead of the built-in version, when available." OFF)
 option(USE_SQLITE3 "Use sqlite to manage server stats and ban list." ON)
 
@@ -37,13 +59,13 @@ if(APPLE)
 endif()
 
 CMAKE_DEPENDENT_OPTION(USE_CRYPTO_OPENSSL "Use OpenSSL instead of MbedTLS for cryptography in STK." ON
-    "NOT USE_SWITCH;NOT WIN32" OFF)
+    "NOT USE_SWITCH;NOT USE_VITA;NOT WIN32" OFF)
 CMAKE_DEPENDENT_OPTION(BUILD_RECORDER "Build opengl recorder" ON
-    "NOT SERVER_ONLY;NOT APPLE;NOT USE_SWITCH" OFF)
+    "NOT SERVER_ONLY;NOT APPLE;NOT USE_SWITCH;NOT USE_VITA" OFF)
 CMAKE_DEPENDENT_OPTION(USE_SYSTEM_SQUISH "Use system Squish library instead of the built-in version, when available." ON
     "NOT SERVER_ONLY" OFF)
 CMAKE_DEPENDENT_OPTION(USE_WIIUSE "Support for wiimote input devices" ON
-    "NOT SERVER_ONLY;NOT CYGWIN;NOT USE_SWITCH;NOT MSVC" OFF)
+    "NOT SERVER_ONLY;NOT CYGWIN;NOT USE_SWITCH;NOT USE_VITA;NOT MSVC" OFF)
 CMAKE_DEPENDENT_OPTION(USE_DNS_C "Build bundled dns resolver" OFF "NOT CYGWIN;NOT USE_SWITCH" ON)
 CMAKE_DEPENDENT_OPTION(USE_MOJOAL "Use bundled MojoAL instead of system OpenAL" OFF "NOT APPLE" ON)
 CMAKE_DEPENDENT_OPTION(HAVE_OPUS "Enable Opus audio codec support (requires libopusfile)" OFF
@@ -53,7 +75,7 @@ if (DLOPEN_MOLTENVK)
     ADD_DEFINITIONS(-DDLOPEN_MOLTENVK)
 endif()
 
-if((UNIX AND NOT APPLE) OR NINTENDO_SWITCH)
+if((UNIX AND NOT APPLE) OR NINTENDO_SWITCH OR USE_VITA)
     include(FindPkgConfig)
 endif()
 
@@ -84,6 +106,20 @@ if (IOS)
     ADD_DEFINITIONS(-DIOS_STK)
     set(CMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2")
     option(USE_GLES2 "Use OpenGL ES2 renderer" ON)
+endif()
+
+if (USE_VITA)
+    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+    ADD_DEFINITIONS(-DMOBILE_STK)
+    ADD_DEFINITIONS(-DVITA_STK)
+    ADD_DEFINITIONS(-D__VITA__)
+    option(USE_GLES2 "Use OpenGL ES2 renderer" ON)
+    set(NO_SHADERC ON CACHE BOOL "" FORCE)
+    set(CHECK_ASSETS OFF CACHE BOOL "" FORCE)
+    set(USE_DNS_C OFF CACHE BOOL "" FORCE)
+    set(SERVER_ONLY OFF CACHE BOOL "" FORCE)
+    set(USE_SQLITE3 OFF CACHE BOOL "" FORCE)
+    set(HAVE_OPUS OFF CACHE BOOL "" FORCE)
 endif()
 
 if((UNIX AND NOT APPLE) AND NOT SERVER_ONLY)
@@ -222,7 +258,7 @@ if(USE_DNS_C)
     add_subdirectory("${PROJECT_SOURCE_DIR}/lib/dnsc")
     include_directories(BEFORE "${PROJECT_SOURCE_DIR}/lib/dnsc")
 else()
-    if(WIN32 OR CMAKE_SYSTEM_NAME MATCHES "BSD" OR CMAKE_SYSTEM_NAME MATCHES "DragonFly" OR USE_SWITCH)
+    if(WIN32 OR CMAKE_SYSTEM_NAME MATCHES "BSD" OR CMAKE_SYSTEM_NAME MATCHES "DragonFly" OR USE_SWITCH OR USE_VITA)
         set(LIBRESOLV_LIBRARY)
     elseif (HAIKU)
         find_library(LIBRESOLV_LIBRARY NAMES network socket)
@@ -242,6 +278,9 @@ endif()
 
 if(ENET_FOUND AND NOT USE_IPV6)
     include_directories(${ENET_INCLUDE_DIRS})
+    if (USE_VITA)
+        MESSAGE(STATUS "Use system ENet (vdpm): ${ENET_LIBRARIES}")
+    endif()
 else()
     # Fallback to built-in version
     add_subdirectory("${PROJECT_SOURCE_DIR}/lib/enet")
@@ -471,7 +510,16 @@ if (NOT SERVER_ONLY)
     SET(SHEENBIDI_LIBRARY sheenbidi)
 
     # Freetype
-    find_package(Freetype)
+    if (USE_VITA)
+        find_path(FREETYPE_INCLUDE_DIRS NAMES freetype2/ft2build.h PATHS "$ENV{VITASDK}/arm-vita-eabi/include")
+        find_library(FREETYPE_LIBRARIES NAMES freetype libfreetype PATHS "$ENV{VITASDK}/arm-vita-eabi/lib")
+        if (FREETYPE_INCLUDE_DIRS AND FREETYPE_LIBRARIES)
+            set(FREETYPE_FOUND TRUE)
+            set(FREETYPE_INCLUDE_DIRS "${FREETYPE_INCLUDE_DIRS}/freetype2")
+        endif()
+    else()
+        find_package(Freetype)
+    endif()
     if(FREETYPE_FOUND)
         include_directories(${FREETYPE_INCLUDE_DIRS})
     else()
@@ -754,6 +802,56 @@ if (USE_SWITCH)
   )
 endif()
 
+if (USE_VITA)
+  find_library(VITAGL_LIBRARY NAMES vitaGL REQUIRED)
+  find_library(VITASHADER_LIBRARY NAMES vitashark REQUIRED)
+  find_library(SDL2_LIBRARY NAMES SDL2 REQUIRED)
+  find_library(MATHNEON_LIBRARY NAMES mathneon)
+  find_library(ZLIB_LIBRARY NAMES z libz REQUIRED)
+  find_library(PNG_LIBRARY NAMES png libpng REQUIRED)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-q,--defsym=roundevenf=nearbyintf")
+  target_link_libraries(supertuxkart
+    -Wl,--start-group
+    ${SDL2_LIBRARY}
+    ${VITAGL_LIBRARY}
+    ${VITASHADER_LIBRARY}
+    ${MATHNEON_LIBRARY}
+    ${ZLIB_LIBRARY}
+    ${PNG_LIBRARY}
+    ${FREETYPE_LIBRARIES}
+    ${HARFBUZZ_LIBRARY}
+    ${OPENAL_LIBRARY}
+    ${OPENSSL_LIBRARIES}
+	-lSceShaccCgExt
+	-ltaihen_stub
+    -logg
+    -lvorbis
+    -lvorbisfile
+    -lSceDisplay_stub
+    -lSceCtrl_stub
+    -lSceTouch_stub
+    -lSceAudio_stub
+    -lSceAudioIn_stub
+    -lSceMotion_stub
+	-lScePower_stub
+    -lSceIme_stub
+    -lSceHid_stub
+    -Wl,--whole-archive -lSceSysmodule_stub -Wl,--no-whole-archive
+    -lSceGxm_stub
+    -lSceKernelDmacmgr_stub
+    -lSceShaccCg_stub
+    -lSceCommonDialog_stub
+    -lSceAppMgr_stub
+    -lSceAppUtil_stub
+    -lSceIofilemgr_stub
+    -lSceNet_stub
+    -Wl,--whole-archive -lSceNetCtl_stub -Wl,--no-whole-archive
+    -lc
+    -lpthread
+    -Wl,--end-group
+  )
+endif()
+
 if(NOT SERVER_ONLY)
     if (USE_MOJOAL)
         target_link_libraries(supertuxkart mojoal ${LIBSAMPLERATE_LIBRARY})
@@ -928,6 +1026,20 @@ if (NOT APPLE)
         target_link_libraries(supertuxkart ${GAMERZILLA_LIBRARIES})
         add_definitions(-DGAMERZILLA)
     endif()
+endif()
+
+if (USE_VITA)
+    set(VITA_APP_NAME "SuperTuxKart")
+    set(VITA_TITLEID "STKV00001")
+    set(VITA_VPKNAME "supertuxkart")
+    set(VITA_VERSION "01.00")
+	set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
+
+    vita_create_self(eboot.bin bin/supertuxkart UNSAFE)
+    vita_create_vpk(${VITA_VPKNAME}.vpk ${VITA_TITLEID} eboot.bin
+        VERSION ${VITA_VERSION}
+        NAME ${VITA_APP_NAME}
+    )
 endif()
 
 # ==== Checking if data folder exists ====

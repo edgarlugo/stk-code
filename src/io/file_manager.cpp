@@ -187,6 +187,10 @@ FileManager::FileManager()
     else if(fileExists("romfs:/data/", version))
         root_dir = "romfs:/data/";
 #endif
+#ifdef VITA_STK
+    else if(fileExists("ux0:data/supertuxkart/stk-data/", version))
+        root_dir = "ux0:data/supertuxkart/stk-data/";
+#endif
     else if(fileExists("./data/", version))
         root_dir = "./data/" ;
     else if(fileExists("../data/", version))
@@ -224,10 +228,22 @@ FileManager::FileManager()
         // fatal will exit the application
     }
 
+#ifdef VITA_STK
+    {
+        std::string dir = root_dir;
+        if (dir.size() == 0 || dir[dir.size() - 1] != '/')
+            dir += "/";
+        m_root_dirs.push_back(dir);
+    }
+#else
     addRootDirs(root_dir);
+#endif
 
     std::string assets_dir;
 #ifdef MOBILE_STK
+#ifdef VITA_STK
+    m_stk_assets_download_dir = "ux0:data/supertuxkart/stk-assets/";
+#else
     m_stk_assets_download_dir = getenv("HOME");
 #ifdef IOS_STK
     m_stk_assets_download_dir += "/Library/Application Support/SuperTuxKart/stk-assets/";
@@ -235,6 +251,7 @@ FileManager::FileManager()
     m_stk_assets_download_dir += "/stk-assets/";
 #else
 #error You must set m_stk_assets_download_dir to appropriate place for your platform
+#endif
 #endif
 
 #else
@@ -1043,6 +1060,9 @@ void FileManager::checkAndCreateConfigDir()
         m_user_config_dir += "/Library/Application Support/";
         const std::string CONFIGDIR("SuperTuxKart");
         m_user_config_dir += CONFIGDIR;
+
+#elif defined(VITA_STK)
+        m_user_config_dir = "ux0:data/supertuxkart";
 
 #elif defined(__HAIKU__)
 

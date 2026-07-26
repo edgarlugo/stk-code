@@ -53,13 +53,17 @@
 #endif
 #else
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <arpa/nameser.h>
 #  include <arpa/nameser_compat.h>
+#endif
 #endif
 #  include <netdb.h>
 #  include <netinet/in.h>
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <resolv.h>
+#endif
 #endif
 #endif
 #endif
@@ -667,6 +671,8 @@ cleanup:
     free(quest);
     dns_so_close(so);
     dns_resconf_close(conf);
+#elif defined(__VITA__)
+    return;
 #else
 #define SRV_WEIGHT (RRFIXEDSZ+2)
 #define SRV_PORT (RRFIXEDSZ+4)

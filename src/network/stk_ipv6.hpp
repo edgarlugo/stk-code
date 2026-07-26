@@ -25,6 +25,9 @@ int isIPv6Socket();
 void setIPv6Socket(int val);
 int getaddrinfo_compat(const char* hostname, const char* servname,
                        const struct addrinfo* hints, struct addrinfo** res);
+#if defined(__VITA__)
+void freeaddrinfo_compat(struct addrinfo* res);
+#endif
 int64_t upperIPv6(const char* ipv6);
 int insideIPv6CIDR(const char* ipv6_cidr, const char* ipv6_in);
 #ifdef __cplusplus

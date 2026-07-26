@@ -166,6 +166,12 @@
 #include <jni.h>
 #endif
 
+#ifdef __vita__
+extern "C" {
+int _newlib_heap_size_user = 300 * 1024 * 1024;
+};
+#endif
+
 #ifdef __SWITCH__
 extern "C" {
   #include <sys/iosupport.h>
@@ -2209,13 +2215,31 @@ void debugLoop()
 
 // ----------------------------------------------------------------------------
 #if defined(ANDROID)
-int android_main(int argc, char *argv[])
+int android_main(int argc, char *argv[]) {
 #elif defined(IOS_STK)
-int ios_main(int argc, char *argv[])
+int ios_main(int argc, char *argv[]) {
+#elif defined(__vita__)
+#include <vitasdk.h>
+extern "C" {
+GLboolean vglInitWithCustomThreshold(int pool_size, int width, int height, int ram_threshold, int cdram_threshold, int phycont_threshold, int cdlg_threshold, SceGxmMultisampleMode msaa);
+};
+#include <SDL2/SDL.h>
+void *real_main(char *argv[]);
+int main(int argc, char *argv[]) {
+	pthread_t t;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setstacksize(&attr, 0x200000);
+	pthread_create(&t, &attr, (void* (*)(void*))real_main, NULL);
+
+	return sceKernelExitDeleteThread(0);
+}
+void *real_main(char *argv[]) {
+	vglInitWithCustomThreshold(0, 960, 544, 6 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
+	int argc = 0;
 #else
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) {
 #endif
-{
 #ifdef __SWITCH__
     constexpr devoptab_t dotab_stdout = {
         .name    = "con",

@@ -6,7 +6,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#if !defined(__VITA__)
 #include <sys/ioctl.h>
+#endif
 #include <sys/time.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
@@ -59,6 +61,20 @@ typedef int socklen_t;
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
+#endif
+
+#if defined(__VITA__)
+#ifndef IPPROTO_IPV6
+#define IPPROTO_IPV6 41
+#endif
+#ifndef IPV6_V6ONLY
+#define IPV6_V6ONLY 27
+#endif
+#ifndef SOMAXCONN
+#define SOMAXCONN 128
+#endif
+static const struct in6_addr enet_in6addr_any_vita = { { { 0 } } };
+#define in6addr_any enet_in6addr_any_vita
 #endif
 
 static enet_uint32 timeBase = 0;

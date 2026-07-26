@@ -59,13 +59,17 @@
 #endif
 #else
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <arpa/nameser.h>
 #  include <arpa/nameser_compat.h>
+#endif
 #endif
 #  include <netdb.h>
 #  include <netinet/in.h>
 #ifndef __SWITCH__
+#ifndef __VITA__
 #  include <resolv.h>
+#endif
 #endif
 #endif
 #endif
@@ -413,7 +417,7 @@ int ConnectToServer::interceptCallback(ENetHost* host, ENetEvent* event)
         host->receivedData[8] == '-' && host->receivedData[9] == 's' &&
         host->receivedData[10] == 't' && host->receivedData[11] == 'k')
     {
-#if defined(ENABLE_IPV6) || defined(__SWITCH__)
+#if defined(ENABLE_IPV6) || defined(__SWITCH__) || defined(__VITA__)
         if (enet_ip_not_equal(host->receivedAddress.host, m_server_address.host) ||
 #else
         if (host->receivedAddress.host != m_server_address.host ||
@@ -795,6 +799,7 @@ cleanup:
     dns_so_close(so);
     dns_resconf_close(conf);
 
+#elif defined(__VITA__)
 #else
     const std::string& utf8name = StringUtils::wideToUtf8(m_server->getName());
     unsigned char response[512] = {};

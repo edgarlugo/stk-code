@@ -45,6 +45,8 @@ endif()
 if(WIN32)
     add_definitions(-D_IRR_STATIC_LIB_)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS) # Shut up about unsafe stuff
+elseif(VITA)
+	set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -Wall -pipe -fno-strict-aliasing")
 else()
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -Wall -pipe -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pipe -fstrict-aliasing")

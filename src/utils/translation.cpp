@@ -312,6 +312,7 @@ Translations::Translations() //: m_dictionary_manager("UTF-16")
 #if defined(WIN32) && !defined(__CYGWIN__)
     // Windows does not have LC_MESSAGES
     setlocale(LC_CTYPE,    "");
+#elif defined(VITA_STK)
 #else
     setlocale(LC_MESSAGES, "");
 #endif
@@ -442,6 +443,7 @@ end:
                 env->DeleteLocalRef(class_native_activity);
             if (native_activity != NULL)
                 env->DeleteLocalRef(native_activity);
+#elif defined(VITA_STK)
 #elif defined(MOBILE_STK)
             SDL_Locale* locale = SDL_GetPreferredLocales();
             if (locale)

@@ -72,6 +72,8 @@
 #include <sys/socket.h>		/* AF_INET AF_INET6 AF_UNIX struct sockaddr struct sockaddr_in struct sockaddr_in6 socket(2) */
 #ifdef __SWITCH__
 #include <sys/socket.h>
+#elif defined(__VITA__)
+#include <sys/socket.h>
 #elif defined(AF_UNIX)
 #include <sys/un.h>		/* struct sockaddr_un */
 #endif
@@ -853,7 +855,7 @@ DNS_NOTUSED static size_t dns_strnlcpy(char *dst, size_t lim, const char *src, s
 } /* dns_strnlcpy() */
 
 
-#if (defined AF_UNIX && !defined _WIN32 && !defined(__SWITCH__))
+#if (defined AF_UNIX && !defined _WIN32 && !defined(__SWITCH__) && !defined(__VITA__))
 #define DNS_HAVE_SOCKADDR_UN 1
 #else
 #define DNS_HAVE_SOCKADDR_UN 0
@@ -9324,7 +9326,7 @@ enum dns_rcode dns_ircode(const char *name) {
 #include <getopt.h>
 #endif
 
-#if !_WIN32 && !defined(__SWITCH__)
+#if !_WIN32 && !defined(__SWITCH__) && !defined(__VITA__)
 #include <err.h>
 #endif
 
@@ -9391,7 +9393,7 @@ DNS_NORETURN static void panic(const char *fmt, ...) {
 	vfprintf(stderr, fmt, ap);
 
 	exit(EXIT_FAILURE);
-#elif !defined(__SWITCH__)
+#elif !defined(__SWITCH__) && !defined(__VITA__)
 	verrx(EXIT_FAILURE, fmt, ap);
 #endif
 } /* panic() */

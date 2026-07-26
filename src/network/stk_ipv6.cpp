@@ -34,13 +34,14 @@
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#ifndef __SWITCH__
+#if !defined(__SWITCH__) && !defined(__VITA__)
 #include <err.h>
 #endif
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <stdio.h>
 #endif
 
 #include "network/network_config.hpp"
@@ -367,6 +368,53 @@ bool sameIPV6(const struct sockaddr_in6* in_1, const struct sockaddr_in6* in_2)
 }   // sameIPV6
 
 // ----------------------------------------------------------------------------
+#if defined(__VITA__)
+extern "C" int getaddrinfo_compat(const char* hostname,
+                                  const char* servname,
+                                  const struct addrinfo* hints,
+                                  struct addrinfo** res)
+{
+    if (!hostname || !res)
+        return -1;
+
+    unsigned a = 0, b = 0, c = 0, d = 0;
+    if (sscanf(hostname, "%u.%u.%u.%u", &a, &b, &c, &d) != 4 ||
+        a > 255 || b > 255 || c > 255 || d > 255)
+        return -1;
+
+    int port = servname ? atoi(servname) : 0;
+
+    size_t total = sizeof(struct addrinfo) + sizeof(struct sockaddr_in);
+    char* mem = (char*)malloc(total);
+    if (!mem)
+        return -1;
+    struct addrinfo* ai = (struct addrinfo*)mem;
+    struct sockaddr_in* sin =
+        (struct sockaddr_in*)(mem + sizeof(struct addrinfo));
+    memset(ai, 0, sizeof(struct addrinfo));
+    memset(sin, 0, sizeof(struct sockaddr_in));
+
+    sin->sin_family = AF_INET;
+    sin->sin_port = htons((uint16_t)port);
+    sin->sin_addr.s_addr = htonl((a << 24) | (b << 16) | (c << 8) | d);
+
+    ai->ai_family = AF_INET;
+    ai->ai_socktype = hints ? hints->ai_socktype : SOCK_STREAM;
+    ai->ai_addrlen = sizeof(struct sockaddr_in);
+    ai->ai_addr = (struct sockaddr*)sin;
+    ai->ai_next = NULL;
+
+    *res = ai;
+    return 0;
+}   // getaddrinfo_compat (Vita)
+
+extern "C" void freeaddrinfo_compat(struct addrinfo* res)
+{
+    free(res);
+}   // freeaddrinfo_compat (Vita)
+
+#else
+// ----------------------------------------------------------------------------
 /** Workaround of a bug in iOS 9 where port number is not written. */
 extern "C" int getaddrinfo_compat(const char* hostname,
                                   const char* servname,
@@ -420,6 +468,7 @@ extern "C" int getaddrinfo_compat(const char* hostname,
     return getaddrinfo(hostname, servname, hints, res);
 #endif
 }   // getaddrinfo_compat
+#endif // !__VITA__
 
 // ----------------------------------------------------------------------------
 void andIPv6(struct in6_addr* ipv6, const struct in6_addr* mask)
