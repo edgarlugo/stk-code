@@ -168,7 +168,7 @@
 
 #ifdef __vita__
 extern "C" {
-int _newlib_heap_size_user = 300 * 1024 * 1024;
+int _newlib_heap_size_user = 256 * 1024 * 1024;
 };
 #endif
 
@@ -2221,21 +2221,37 @@ int ios_main(int argc, char *argv[]) {
 #elif defined(__vita__)
 #include <vitasdk.h>
 extern "C" {
+void vglSetParamBufferSize(uint32_t size);
 GLboolean vglInitWithCustomThreshold(int pool_size, int width, int height, int ram_threshold, int cdram_threshold, int phycont_threshold, int cdlg_threshold, SceGxmMultisampleMode msaa);
+void vglSetCircularPoolSize(uint32_t size);
+
+int __real_pthread_create(pthread_t * tid, const pthread_attr_t * attr, void *(*start) (void *), void *arg);
+int __wrap_pthread_create(pthread_t * tid, const pthread_attr_t * _attr, void *(*start) (void *), void *arg) {
+	sceClibPrintf("Starting wrapped pthread thread\n");
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setstacksize(&attr, 0x200000);
+	return __real_pthread_create(tid, &attr, start, arg);
+}
 };
 #include <SDL2/SDL.h>
 void *real_main(char *argv[]);
 int main(int argc, char *argv[]) {
+	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
+	scePowerSetArmClockFrequency(444);
+    scePowerSetBusClockFrequency(222);
+    scePowerSetGpuClockFrequency(222);
+    scePowerSetGpuXbarClockFrequency(166);
+	
 	pthread_t t;
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, 0x200000);
-	pthread_create(&t, &attr, (void* (*)(void*))real_main, NULL);
+	pthread_create(&t, NULL, (void* (*)(void*))real_main, NULL);
 
 	return sceKernelExitDeleteThread(0);
 }
 void *real_main(char *argv[]) {
-	vglInitWithCustomThreshold(0, 960, 544, 6 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
+	vglSetParamBufferSize(6 * 1024 * 1024);
+	vglSetCircularPoolSize(30 * 1024 * 1024);
+	vglInitWithCustomThreshold(0, 960, 544, 12 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
 	int argc = 0;
 #else
 int main(int argc, char *argv[]) {
