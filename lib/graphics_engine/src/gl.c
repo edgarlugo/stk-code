@@ -10742,6 +10742,9 @@ static int glad_gl_find_extensions_gles2( int version) {
 
 static int glad_gl_find_core_gles2(void) {
     int i, major, minor;
+#ifdef __vita__
+	major = 3; minor = 0;
+#else
     const char* version;
     const char* prefixes[] = {
         "OpenGL ES-CM ",
@@ -10760,7 +10763,7 @@ static int glad_gl_find_core_gles2(void) {
     }
 
     GLAD_IMPL_UTIL_SSCANF(version, "%d.%d", &major, &minor);
-
+#endif
     GLAD_GL_ES_VERSION_2_0 = (major == 2 && minor >= 0) || major > 2;
     GLAD_GL_ES_VERSION_3_0 = (major == 3 && minor >= 0) || major > 3;
 

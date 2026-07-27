@@ -119,7 +119,10 @@ void GEGLTexture::upload(uint8_t* data)
     const unsigned int h = m_size.Height;
     unsigned int format = m_single_channel ? GL_RED : GL_BGRA;
     unsigned int internal_format = m_single_channel ? GL_R8 : GL_RGBA8;
-
+#ifdef __vita__
+	if (!m_single_channel && (m_texture_name < 0x41 || m_texture_name > 0x43))
+		internal_format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+#else
     if (m_driver_type == video::EDT_OGLES2)
     {
         formatConversion(data, &format, w, h);
@@ -129,7 +132,7 @@ void GEGLTexture::upload(uint8_t* data)
         if (gl_major_version < 3)
             internal_format = GL_RGBA;
     }
-
+#endif
     glBindTexture(GL_TEXTURE_2D, m_texture_name);
     if (m_single_channel)
     {
@@ -141,8 +144,10 @@ void GEGLTexture::upload(uint8_t* data)
     }
     glTexImage2D(GL_TEXTURE_2D, 0, internal_format, w, h, 0, format,
         GL_UNSIGNED_BYTE, data);
+#ifndef __vita__
     if (hasMipMaps())
         glGenerateMipmap(GL_TEXTURE_2D);
+#endif
     glBindTexture(GL_TEXTURE_2D, 0);
     m_texture_size = w * h * (m_single_channel ? 1 : 4);
 }   // upload
@@ -193,6 +198,8 @@ void GEGLTexture::formatConversion(uint8_t* data, unsigned int* format,
     }
 }   // formatConversion
 
+#include <vitasdk.h>
+
 //-----------------------------------------------------------------------------
 void GEGLTexture::updateTexture(void* data, video::ECOLOR_FORMAT format, u32 w,
                                 u32 h, u32 x, u32 y)
@@ -232,8 +239,10 @@ void GEGLTexture::updateTexture(void* data, video::ECOLOR_FORMAT format, u32 w,
                 GL_UNSIGNED_BYTE, u8_data);
         }
     }
+#ifndef __vita__
     if (hasMipMaps())
         glGenerateMipmap(GL_TEXTURE_2D);
+#endif
     glBindTexture(GL_TEXTURE_2D, 0);
 }   // updateTexture
 

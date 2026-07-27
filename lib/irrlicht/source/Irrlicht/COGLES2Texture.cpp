@@ -252,6 +252,14 @@ void COGLES2Texture::uploadTexture(bool newTexture, void* mipmapData, u32 level)
 	if (InternalFormat==GL_BGRA)
 		InternalFormat=GL_RGBA;
 #endif
+
+#ifdef __vita__
+	if (InternalFormat == GL_RGBA || InternalFormat == GL_BGRA)
+		InternalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+	else
+		InternalFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+#endif
+
 	// make sure we don't change the internal format of existing matrices
 	if (!newTexture)
 		InternalFormat=oldInternalFormat;
@@ -325,12 +333,16 @@ void COGLES2Texture::uploadTexture(bool newTexture, void* mipmapData, u32 level)
 		source = dest;
 	}
 
+#ifndef __vita__
 	if (newTexture)
+#endif
 		glTexImage2D(GL_TEXTURE_2D, level, InternalFormat, image->getDimension().Width,
 			image->getDimension().Height, 0, PixelFormat, PixelType, source);
+#ifndef __vita__
 	else
 		glTexSubImage2D(GL_TEXTURE_2D, level, 0, 0, image->getDimension().Width,
 			image->getDimension().Height, PixelFormat, PixelType, source);
+#endif
 
 	if (convert)
 	{
@@ -446,6 +458,9 @@ bool COGLES2Texture::hasMipMaps() const
 //! modifying the texture
 void COGLES2Texture::regenerateMipMapLevels(void* mipmapData)
 {
+#ifdef __vita__
+	return;
+#endif
 	if (AutomaticMipmapUpdate || !HasMipMaps || !Image)
 		return;
 	if ((Image->getDimension().Width==1) && (Image->getDimension().Height==1))
