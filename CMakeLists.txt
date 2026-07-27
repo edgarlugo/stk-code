@@ -511,7 +511,7 @@ if (NOT SERVER_ONLY)
 
     # Freetype
     if (USE_VITA)
-        find_path(FREETYPE_INCLUDE_DIRS NAMES freetype2/ft2build.h PATHS "$ENV{VITASDK}/arm-vita-eabi/include")
+		find_path(FREETYPE_INCLUDE_DIRS NAMES freetype2/ft2build.h PATHS "$ENV{VITASDK}/arm-vita-eabi/include")
         find_library(FREETYPE_LIBRARIES NAMES freetype libfreetype PATHS "$ENV{VITASDK}/arm-vita-eabi/lib")
         if (FREETYPE_INCLUDE_DIRS AND FREETYPE_LIBRARIES)
             set(FREETYPE_FOUND TRUE)
@@ -760,6 +760,9 @@ if (NOT USE_APPLE_NETWORK_LIBRARIES)
 endif()
 
 # Common library dependencies
+if (USE_VITA)
+target_link_options(supertuxkart PRIVATE "LINKER:--pic-veneer")
+endif()
 target_link_libraries(supertuxkart
     bulletdynamics
     bulletcollision
@@ -809,7 +812,7 @@ if (USE_VITA)
   find_library(MATHNEON_LIBRARY NAMES mathneon)
   find_library(ZLIB_LIBRARY NAMES z libz REQUIRED)
   find_library(PNG_LIBRARY NAMES png libpng REQUIRED)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-q,--defsym=roundevenf=nearbyintf")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-q,--wrap,pthread_create,--defsym=roundevenf=nearbyintf")
   target_link_libraries(supertuxkart
     -Wl,--start-group
     ${SDL2_LIBRARY}
