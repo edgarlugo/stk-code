@@ -424,6 +424,9 @@ bool COGLES2MaterialRenderer::setPixelShaderConstant(s32 index, const s32* ints,
 
 	switch (UniformInfo[index].type)
 	{
+#ifdef __vita__
+		case GL_FLOAT:
+#endif
 		case GL_INT:
 		case GL_BOOL:
 			glUniform1iv(UniformInfo[index].location, count, ints);

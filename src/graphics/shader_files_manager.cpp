@@ -194,9 +194,10 @@ ShaderFilesManager::SharedShader ShaderFilesManager::loadShader
         code << "precision highp float;\n";
 #else
     int range[2], precision;
+#ifndef __vita__
     glGetShaderPrecisionFormat(GL_FRAGMENT_SHADER, GL_HIGH_FLOAT, range,
         &precision);
-
+#endif
     if (precision > 0)
     {
         code << "precision highp float;\n";

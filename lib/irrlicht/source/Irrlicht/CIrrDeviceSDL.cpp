@@ -503,6 +503,7 @@ void CIrrDeviceSDL::tryCreateOpenGLContext(u32 flags)
 start:
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, CreationParams.Doublebuffer);
 	irr::video::useCoreContext = true;
+	CreationParams.ForceLegacyDevice = true;
 
 	if (GLContextDebugBit)
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);

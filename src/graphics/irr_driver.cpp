@@ -193,6 +193,11 @@ IrrDriver::IrrDriver()
     p.Bits          = 24U;
     p.WindowSize    = core::dimension2d<u32>(1280,720);
     p.ForceLegacyDevice = UserConfigParams::m_force_legacy_device;
+#elif defined(__vita__)
+    p.DriverType    = video::EDT_NULL;
+    p.Bits          = 24U;
+    p.WindowSize    = core::dimension2d<u32>(960,544);
+    p.ForceLegacyDevice = true;
 #else
     p.DriverType    = video::EDT_NULL;
     p.Bits          = 16U;
