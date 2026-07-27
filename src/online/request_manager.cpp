@@ -188,7 +188,17 @@ namespace Online
             // (pthread_cond_wait man page)!
             while (empty)
             {
+#if defined(__VITA__)
+                // std::condition_variable::wait() crashes on this platform
+                // (pthread_cond_wait internal state issue); poll instead,
+                // same safe pattern already used by ProtocolManager's
+                // asynchronous update thread.
+                ul.unlock();
+                StkTime::sleep(2);
+                ul.lock();
+#else
                 me->m_condition_variable.wait(ul);
+#endif
                 empty = me->m_request_queue.getData().empty();
             }
             // We pause the request manager thread when going into background in iOS
