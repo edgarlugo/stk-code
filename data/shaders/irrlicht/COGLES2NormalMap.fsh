@@ -11,8 +11,10 @@ uniform sampler2D texture0;
 uniform sampler2D texture1;
 
 varying vec4 varTexCoord;
-varying vec3 varLightVector[MAX_LIGHTS];
-varying vec4 varLightColor[MAX_LIGHTS];
+varying vec3 varLightVector0;
+varying vec3 varLightVector1;
+varying vec4 varLightColor0;
+varying vec4 varLightColor1;
 
 varying vec4 debug;
 
@@ -23,14 +25,14 @@ void main(void)
 	vec4 colorMap  = texture2D(texture0, varTexCoord.xy);
 	
 	// calculate color of light 0
-	vec4 color = clamp(varLightColor[0], 0.0, 1.0) * dot(normalMap.xyz, normalize(varLightVector[0].xyz));
+	vec4 color = clamp(varLightColor0, 0.0, 1.0) * dot(normalMap.xyz, normalize(varLightVector0.xyz));
 	
 	// calculate color of light 1
-	color += clamp(varLightColor[1], 0.0, 1.0) * dot(normalMap.xyz, normalize(varLightVector[1].xyz));
+	color += clamp(varLightColor1, 0.0, 1.0) * dot(normalMap.xyz, normalize(varLightVector1.xyz));
 
 	//luminance * base color
 	color *= colorMap;
-	color.a = varLightColor[0].a;
+	color.a = varLightColor0.a;
 	
 	gl_FragColor = color;
 }

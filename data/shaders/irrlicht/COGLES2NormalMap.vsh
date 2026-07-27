@@ -17,8 +17,10 @@ uniform vec4 uLightPos[MAX_LIGHTS];
 uniform vec4 uLightColor[MAX_LIGHTS];
 
 varying vec4 varTexCoord;
-varying vec3 varLightVector[MAX_LIGHTS];
-varying vec4 varLightColor[MAX_LIGHTS];
+varying vec3 varLightVector0;
+varying vec3 varLightVector1;
+varying vec4 varLightColor0;
+varying vec4 varLightColor1;
 
 varying vec4 debug;
 
@@ -33,37 +35,37 @@ void main(void)
 	vec4 tempLightVector1 = uLightPos[1] - inVertexPosition;
 	
 	// transform the light vector 1 with U, V, W
-	varLightVector[0].x = dot(inVertexTangent,  tempLightVector0.xyz);
-	varLightVector[0].y = dot(inVertexBinormal, tempLightVector0.xyz);
-	varLightVector[0].z = dot(inVertexNormal,   tempLightVector0.xyz);
+	varLightVector0.x = dot(inVertexTangent,  tempLightVector0.xyz);
+	varLightVector0.y = dot(inVertexBinormal, tempLightVector0.xyz);
+	varLightVector0.z = dot(inVertexNormal,   tempLightVector0.xyz);
 
 	
 	// transform the light vector 2 with U, V, W
-	varLightVector[1].x = dot(inVertexTangent,  tempLightVector1.xyz);
-	varLightVector[1].y = dot(inVertexBinormal, tempLightVector1.xyz);
-	varLightVector[1].z = dot(inVertexNormal,   tempLightVector1.xyz);
+	varLightVector1.x = dot(inVertexTangent,  tempLightVector1.xyz);
+	varLightVector1.y = dot(inVertexBinormal, tempLightVector1.xyz);
+	varLightVector1.z = dot(inVertexNormal,   tempLightVector1.xyz);
 
 	// calculate attenuation of light 0
-	varLightColor[0].w = 0.0;
-	varLightColor[0].x = dot(tempLightVector0, tempLightVector0);
-	varLightColor[0].x *= uLightColor[0].w;
-	varLightColor[0] = vec4(inversesqrt(varLightColor[0].x));
-	varLightColor[0] *= uLightColor[0];
+	varLightColor0.w = 0.0;
+	varLightColor0.x = dot(tempLightVector0, tempLightVector0);
+	varLightColor0.x *= uLightColor[0].w;
+	varLightColor0 = vec4(inversesqrt(varLightColor0.x));
+	varLightColor0 *= uLightColor[0];
 	
 	// normalize light vector 0
-	varLightVector[0] = normalize(varLightVector[0]);
+	varLightVector0 = normalize(varLightVector0);
 	
 	// calculate attenuation of light 1
-	varLightColor[1].w = 0.0;
-	varLightColor[1].x = dot(tempLightVector1, tempLightVector1);
-	varLightColor[1].x *= uLightColor[1].w;
-	varLightColor[1] = vec4(inversesqrt(varLightColor[1].x));
-	varLightColor[1] *= uLightColor[1];
+	varLightColor1.w = 0.0;
+	varLightColor1.x = dot(tempLightVector1, tempLightVector1);
+	varLightColor1.x *= uLightColor[1].w;
+	varLightColor1 = vec4(inversesqrt(varLightColor1.x));
+	varLightColor1 *= uLightColor[1];
 	
 	// normalize light vector 1
-	varLightVector[1] = normalize(varLightVector[1]);
+	varLightVector1 = normalize(varLightVector1);
 	
 	// move out texture coordinates and original alpha value
 	varTexCoord = inTexCoord0;
-	varLightColor[0].a = inVertexColor.a;
+	varLightColor0.a = inVertexColor.a;
 }
