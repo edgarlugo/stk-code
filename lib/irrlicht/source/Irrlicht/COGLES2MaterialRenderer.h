@@ -81,6 +81,9 @@ public:
 	virtual bool setPixelShaderConstant(s32 index, const f32* floats, int count);
 	virtual bool setPixelShaderConstant(s32 index, const s32* ints, int count);
 
+	//! True when this uniform already holds these values, so the GL call can be skipped
+	bool isUniformUnchanged(s32 index, const void* data, u32 bytes, bool isInt);
+
 	virtual IVideoDriver* getVideoDriver();
 
 protected:
@@ -106,9 +109,16 @@ protected:
 
 	struct SUniformInfo
 	{
+		SUniformInfo() : type(0), location(-1), lastSize(0), lastIsInt(false) {}
+
 		core::stringc name;
 		GLenum type;
 		GLint location;
+
+		// Last values sent, up to a 4x4 matrix
+		u8 lastValue[64];
+		u32 lastSize;
+		bool lastIsInt;
 	};
 
 	GLuint Program;

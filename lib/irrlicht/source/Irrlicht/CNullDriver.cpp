@@ -22,6 +22,13 @@ namespace irr
 namespace video
 {
 
+#ifdef __vita__
+// vitaGL copies client-side vertex data on every draw call, so small buffers want a VBO too
+#define IRR_MIN_VERTEX_COUNT_FOR_VBO 0
+#else
+#define IRR_MIN_VERTEX_COUNT_FOR_VBO 500
+#endif
+
 //! creates a loader which is able to load windows bitmaps
 IImageLoader* createImageLoaderBMP();
 
@@ -86,7 +93,7 @@ IImageWriter* createImageWriterPPM();
 //! constructor
 CNullDriver::CNullDriver(io::IFileSystem* io, const core::dimension2d<u32>& screenSize)
 : FileSystem(io), MeshManipulator(0), ViewPort(0,0,0,0), ScreenSize(screenSize),
-	PrimitivesDrawn(0), MinVertexCountForVBO(500), TextureCreationFlags(0),
+	PrimitivesDrawn(0), MinVertexCountForVBO(IRR_MIN_VERTEX_COUNT_FOR_VBO), TextureCreationFlags(0),
 	OverrideMaterial2DEnabled(false), AllowZWriteOnTransparent(false)
 {
 	#ifdef _DEBUG

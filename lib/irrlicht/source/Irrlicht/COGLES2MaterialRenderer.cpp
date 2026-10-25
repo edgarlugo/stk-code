@@ -365,10 +365,26 @@ bool COGLES2MaterialRenderer::setVertexShaderConstant(s32 index, const s32* ints
 	return setPixelShaderConstant(index, ints, count);
 }
 
+bool COGLES2MaterialRenderer::isUniformUnchanged(s32 index, const void* data, u32 bytes, bool isInt)
+{
+	SUniformInfo& info = UniformInfo[index];
+	if (!data || bytes > sizeof(info.lastValue))
+		return false;
+	if (info.lastSize == bytes && info.lastIsInt == isInt && memcmp(info.lastValue, data, bytes) == 0)
+		return true;
+	memcpy(info.lastValue, data, bytes);
+	info.lastSize = bytes;
+	info.lastIsInt = isInt;
+	return false;
+}
+
 bool COGLES2MaterialRenderer::setPixelShaderConstant(s32 index, const f32* floats, int count)
 {
 	if(index < 0 || UniformInfo[index].location < 0)
 		return false;
+
+	if (isUniformUnchanged(index, floats, count * sizeof(f32), false))
+		return true;
 
 	bool status = true;
 
@@ -419,6 +435,9 @@ bool COGLES2MaterialRenderer::setPixelShaderConstant(s32 index, const s32* ints,
 {
 	if(index < 0 || UniformInfo[index].location < 0)
 		return false;
+
+	if (isUniformUnchanged(index, ints, count * sizeof(s32), true))
+		return true;
 
 	bool status = true;
 
