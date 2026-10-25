@@ -365,6 +365,10 @@ extern "C" void update_fullscreen_desktop(int val)
 }
 
 
+#ifdef __vita__
+extern "C" void vglWaitVblankStart(unsigned char enable);
+#endif
+
 // Used in OptionsScreenVideo for live updating vertical sync config
 extern "C" void update_swap_interval(int swap_interval)
 {
@@ -372,6 +376,12 @@ extern "C" void update_swap_interval(int swap_interval)
 	// iOS always use vertical sync
 	if (swap_interval > 1)
 		swap_interval = 1;
+
+#ifdef __vita__
+	// SDL's swap interval does not reach vitaGL
+	vglWaitVblankStart(swap_interval > 0);
+	return;
+#endif
 
 	GE::GEVulkanDriver* gevk = GE::getVKDriver();
 	if (gevk)
