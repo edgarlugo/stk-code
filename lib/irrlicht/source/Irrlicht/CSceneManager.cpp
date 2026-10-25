@@ -938,6 +938,28 @@ bool CSceneManager::isCulled(const ISceneNode* node) const
 		core::aabbox3d<f32> tbox = node->getBoundingBox();
 		node->getAbsoluteTransformation().transformBoxEx(tbox);
 		result = !(tbox.intersectsWithBox(cam->getViewFrustum()->getBoundingBox() ));
+#ifdef __vita__
+		// The bounding box of the frustum is much bigger than the frustum, so many nodes beside
+		// or behind the camera pass the test above; drawing them is the main CPU cost on Vita.
+		// Also test the transformed box against the frustum planes (their normals point out).
+		if (!result)
+		{
+			const SViewFrustum* frust = cam->getViewFrustum();
+			const core::vector3df center = tbox.getCenter();
+			const core::vector3df half = tbox.getExtent() * 0.5f;
+			for (s32 i = 0; i < SViewFrustum::VF_PLANE_COUNT; ++i)
+			{
+				const core::plane3df& p = frust->planes[i];
+				const f32 radius = fabsf(p.Normal.X) * half.X + fabsf(p.Normal.Y) * half.Y +
+					fabsf(p.Normal.Z) * half.Z;
+				if (p.Normal.dotProduct(center) + p.D > radius)
+				{
+					result = true;
+					break;
+				}
+			}
+		}
+#endif
 	}
 
 	// can be seen by a bounding sphere
