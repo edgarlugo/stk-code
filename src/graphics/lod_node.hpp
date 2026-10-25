@@ -66,6 +66,10 @@ private:
     int m_current_level;
     bool m_current_level_dirty;
 
+    /** Level animated by the last OnAnimate (fixed pipeline only, -1 if none) and its time */
+    int m_animated_level;
+    u32 m_animated_time;
+
     // Distance below which switching between two levels of detail is avoided
     int m_min_switch_distance;
 

@@ -51,6 +51,8 @@ LODNode::LODNode(std::string group_name, scene::ISceneNode* parent,
     m_area = 0;
     m_current_level = -1;
     m_current_level_dirty = true;
+    m_animated_level = -1;
+    m_animated_time = 0;
     m_lod_distances_updated = false;
     m_min_switch_distance = 0;
 }
@@ -132,6 +134,21 @@ void LODNode::OnAnimate(u32 timeMs)
         // update absolute position
         updateAbsolutePosition();
 
+#ifndef SERVER_ONLY
+        if (!CVS->isGLSL())
+        {
+            // Only the level drawn last frame is animated here: OnRegisterSceneNode
+            // animates the new one if the level changes. The first level's position
+            // is still needed to compute the distance to the camera.
+            m_animated_level = m_forced_lod > -1 ? m_forced_lod : m_current_level;
+            m_animated_time = timeMs;
+            if (m_animated_level >= 0)
+                m_nodes[m_animated_level]->OnAnimate(timeMs);
+            if (m_animated_level != 0)
+                m_nodes[0]->updateAbsolutePosition();
+        }
+        else
+#endif
         for (size_t i = 0; i < m_nodes.size(); i++)
         {
             m_nodes[i]->setVisible(true);
@@ -187,6 +204,8 @@ void LODNode::OnRegisterSceneNode()
         
         if (level >= 0)
         {
+            if (level != m_animated_level)
+                m_nodes[level]->OnAnimate(m_animated_time);
             m_nodes[level]->OnRegisterSceneNode();
         }
         for (unsigned i = 0; i < Children.size(); i++)
