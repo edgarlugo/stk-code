@@ -18,6 +18,8 @@
 
 #include "tracks/track_object_manager.hpp"
 
+#include <algorithm>
+
 #include "animations/ipo.hpp"
 #include "animations/three_d_animation.hpp"
 #include "config/stk_config.hpp"
@@ -37,8 +39,11 @@ TrackObjectManager::TrackObjectManager()
 }   // TrackObjectManager
 
 // ----------------------------------------------------------------------------
+bool TrackObjectManager::m_update_list_dirty = true;
+
 TrackObjectManager::~TrackObjectManager()
 {
+    m_update_list_dirty = true;
 }   // ~TrackObjectManager
 
 // ----------------------------------------------------------------------------
@@ -53,6 +58,7 @@ void TrackObjectManager::add(const XMLNode &xml_node, scene::ISceneNode* parent,
     {
         TrackObject *obj = new TrackObject(xml_node, parent, model_def_loader, parent_library);
         m_all_objects.push_back(obj);
+        m_update_list_dirty = true;
         if(obj->isDriveable())
             m_driveable_objects.push_back(obj);
     }
@@ -68,6 +74,7 @@ void TrackObjectManager::add(const XMLNode &xml_node, scene::ISceneNode* parent,
  */
 void TrackObjectManager::init()
 {
+    m_update_list_dirty = true;
     int moveable_objects = 0;
     bool warned = false;
     for (unsigned i = 0; i < m_all_objects.m_contents_vector.size(); i++)
@@ -107,6 +114,7 @@ void TrackObjectManager::init()
  */
 void TrackObjectManager::reset()
 {
+    m_update_list_dirty = true;
     for (TrackObject* curr : m_all_objects)
     {
         curr->reset();
@@ -188,16 +196,42 @@ void TrackObjectManager::updateGraphics(float dt)
  */
 void TrackObjectManager::update(float dt)
 {
-    TrackObject* curr;
-    for_in (curr, m_all_objects)
+    // This runs on every physics step, and tracks can have thousands of objects
+    // that do nothing here: only go through the ones that need it
+    if (m_update_list_dirty)
     {
-        curr->update(dt);
+        m_update_list_dirty = false;
+        m_objects_to_update.clear();
+        TrackObject* curr;
+        for_in (curr, m_all_objects)
+        {
+            if (curr->needsUpdate())
+                m_objects_to_update.push_back(curr);
+        }
+    }
+
+    bool finished = false;
+    for (unsigned int i = 0; i < m_objects_to_update.size(); i++)
+    {
+        m_objects_to_update[i]->update(dt);
+        // Scripts run by update() may add or remove objects
+        if (m_update_list_dirty)
+            return;
+        finished |= !m_objects_to_update[i]->needsUpdate();
+    }
+    if (finished)
+    {
+        m_objects_to_update.erase(std::remove_if(m_objects_to_update.begin(),
+            m_objects_to_update.end(),
+            [](TrackObject* obj) { return !obj->needsUpdate(); }),
+            m_objects_to_update.end());
     }
 }   // update
 
 // ----------------------------------------------------------------------------
 void TrackObjectManager::resetAfterRewind()
 {
+    m_update_list_dirty = true;
     TrackObject* curr;
     for_in (curr, m_all_objects)
     {
@@ -271,6 +305,7 @@ bool TrackObjectManager::castRay(const btVector3 &from,
 void TrackObjectManager::insertObject(TrackObject* object)
 {
     m_all_objects.push_back(object);
+    m_update_list_dirty = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -288,5 +323,6 @@ void TrackObjectManager::insertDriveableObject(TrackObject* object)
 void TrackObjectManager::removeObject(TrackObject* obj)
 {
     m_all_objects.remove(obj);
+    m_update_list_dirty = true;
     delete obj;
 }   // removeObject

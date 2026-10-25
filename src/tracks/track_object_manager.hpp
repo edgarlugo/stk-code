@@ -51,11 +51,18 @@ protected:
     /** A second list which holds all objects that karts can drive on. */
     PtrVector<TrackObject, REF> m_driveable_objects;
 
+    /** The objects whose update() does something (most are static scenery).
+     *  Rebuilt from m_all_objects when objects are added, removed or reset. */
+    std::vector<TrackObject*> m_objects_to_update;
+    static bool m_update_list_dirty;
+
 public:
          TrackObjectManager();
         ~TrackObjectManager();
     void reset();
     void init();
+    /** Called when the list of objects to update might be outdated. */
+    static void markUpdateListDirty() { m_update_list_dirty = true; }
     void add(const XMLNode &xml_node, scene::ISceneNode* parent,
              ModelDefinitionLoader& model_def_loader,
              TrackObject* parent_library);

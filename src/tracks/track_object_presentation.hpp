@@ -93,6 +93,8 @@ public:
     }
     virtual void updateGraphics(float dt) {}
     virtual void update(float dt) {}
+    /** True if update() can still do something. */
+    virtual bool needsUpdate() const { return false; }
     virtual void move(const core::vector3df& xyz, const core::vector3df& hpr,
         const core::vector3df& scale, bool isAbsoluteCoord) {}
 
@@ -203,11 +205,11 @@ public:
         ModelDefinitionLoader& model_def_loader);
     virtual ~TrackObjectPresentationLibraryNode();
     virtual void update(float dt) OVERRIDE;
-    virtual void reset() OVERRIDE
+    virtual bool needsUpdate() const OVERRIDE
     {
-        m_reset_executed = false;
-        TrackObjectPresentationSceneNode::reset();
+        return !m_start_executed || !m_reset_executed;
     }
+    virtual void reset() OVERRIDE;
     virtual void move(const core::vector3df& xyz, const core::vector3df& hpr,
         const core::vector3df& scale, bool isAbsoluteCoord) OVERRIDE;
 };   // TrackObjectPresentationLibraryNode

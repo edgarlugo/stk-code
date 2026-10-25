@@ -537,6 +537,13 @@ void TrackObject::updateGraphics(float dt)
 /** This updates once per physics time step.
  *  float dt Time since last rame.
  */
+bool TrackObject::needsUpdate() const
+{
+    return m_animator || (m_physical_object && m_physical_object->isDynamic()) ||
+        (m_presentation && m_presentation->needsUpdate());
+}   // needsUpdate
+
+// ----------------------------------------------------------------------------
 void TrackObject::update(float dt)
 {
     if (m_presentation) m_presentation->update(dt);

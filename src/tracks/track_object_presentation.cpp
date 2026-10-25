@@ -333,6 +333,15 @@ void TrackObjectPresentationLibraryNode::update(float dt)
 }
 
 // ----------------------------------------------------------------------------
+void TrackObjectPresentationLibraryNode::reset()
+{
+    m_reset_executed = false;
+    // update() has to run again for the onReset script
+    TrackObjectManager::markUpdateListDirty();
+    TrackObjectPresentationSceneNode::reset();
+}   // reset
+
+// ----------------------------------------------------------------------------
 TrackObjectPresentationLibraryNode::~TrackObjectPresentationLibraryNode()
 {
     irr_driver->removeNode(m_node);

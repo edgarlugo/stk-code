@@ -127,6 +127,8 @@ public:
                              const PhysicalObject::Settings* physicsSettings);
     virtual      ~TrackObject();
     virtual void update(float dt);
+    /** True if update() can do something for this object. */
+    bool needsUpdate() const;
     virtual void updateGraphics(float dt);
     virtual void resetAfterRewind();
     void move(const core::vector3df& xyz, const core::vector3df& hpr,
