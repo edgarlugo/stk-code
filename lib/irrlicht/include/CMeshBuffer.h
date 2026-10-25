@@ -19,7 +19,7 @@ namespace scene
 	public:
 		//! Default constructor for empty meshbuffer
 		CMeshBuffer(): ChangedID_Vertex(1), ChangedID_Index(1),
-				MappingHint_Vertex(EHM_NEVER), MappingHint_Index(EHM_NEVER),
+				MappingHint_Vertex(EHM_DEFAULT), MappingHint_Index(EHM_DEFAULT),
 				Primitive(EPT_TRIANGLES)
 		{
 			#ifdef _DEBUG

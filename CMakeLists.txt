@@ -813,6 +813,8 @@ if (USE_VITA)
   find_library(ZLIB_LIBRARY NAMES z libz REQUIRED)
   find_library(PNG_LIBRARY NAMES png libpng REQUIRED)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-q,--wrap,pthread_create,--defsym=roundevenf=nearbyintf")
+  # libstdc++ only sees pthread (std::thread, the audio thread) when the whole library is linked in
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
   target_link_libraries(supertuxkart
     -Wl,--start-group
     ${SDL2_LIBRARY}

@@ -390,6 +390,13 @@ enum MultitouchControls
 /** \brief Contains all parameters that are stored in the user's config file
  *  \ingroup config
  */
+// Graphics defaults: the Vita is CPU bound with the desktop ones (see the vita-perf notes in the commit)
+#ifdef __vita__
+#define GFX_DEFAULT(desktop, vita) vita
+#else
+#define GFX_DEFAULT(desktop, vita) desktop
+#endif
+
 namespace UserConfigParams
 {
 
@@ -675,7 +682,7 @@ namespace UserConfigParams
      *  to e.g. disable h.d. textures on hd3000 as default, but still allow the
      *  user to enable it. */
     PARAM_PREFIX IntUserConfigParam        m_high_definition_textures
-        PARAM_DEFAULT(IntUserConfigParam(1, "enable_high_definition_textures",
+        PARAM_DEFAULT(IntUserConfigParam(GFX_DEFAULT(1, 0), "enable_high_definition_textures",
         &m_video_group, "Enable high definition textures. Bit flag: "
                         "bit 0 = enabled/disabled; bit 1 = set by user/set as default"));
     PARAM_PREFIX BoolUserConfigParam        m_glow
@@ -956,7 +963,7 @@ namespace UserConfigParams
                                                 "Graphics Quality Settings") );
 
     PARAM_PREFIX IntUserConfigParam        m_particles_effects
-            PARAM_DEFAULT(  IntUserConfigParam(2, "particles-effecs",
+            PARAM_DEFAULT(  IntUserConfigParam(GFX_DEFAULT(2, 0), "particles-effecs",
                             &m_graphics_quality, "Particles effects: 0 disabled, 1 only important, 2 enabled") );
 
     // This saves the actual user preference.
@@ -970,18 +977,18 @@ namespace UserConfigParams
         &m_graphics_quality, "Easter Bunny Ears: 0 use current date, 1 always on, 2 always off"));
 
     PARAM_PREFIX BoolUserConfigParam       m_animated_characters
-            PARAM_DEFAULT(  BoolUserConfigParam(true,
+            PARAM_DEFAULT(  BoolUserConfigParam(GFX_DEFAULT(true, false),
                             "animated-characters", &m_graphics_quality,
                 "Whether to display animated characters") );
 
     PARAM_PREFIX IntUserConfigParam        m_geometry_level
-            PARAM_DEFAULT(  IntUserConfigParam(2,
+            PARAM_DEFAULT(  IntUserConfigParam(GFX_DEFAULT(2, 0),
                             "geometry-level", &m_graphics_quality,
                 "Geometry quality 0=lowest level, no details; "
                 "5=everything is displayed") );
 
     PARAM_PREFIX IntUserConfigParam         m_anisotropic
-            PARAM_DEFAULT( IntUserConfigParam(4, "anisotropic",
+            PARAM_DEFAULT( IntUserConfigParam(GFX_DEFAULT(4, 0), "anisotropic",
                            &m_graphics_quality,
                            "Quality of anisotropic filtering (usual values include 2-4-8-16; 0 to disable)") );
 

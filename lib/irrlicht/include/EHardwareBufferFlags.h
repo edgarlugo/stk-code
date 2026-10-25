@@ -37,6 +37,14 @@ namespace scene
 		EBT_VERTEX_AND_INDEX
 	};
 
+	//! Mapping hint new mesh buffers start with
+#ifdef __vita__
+	// vitaGL copies the vertices and indices of every draw call that reads them from client memory
+	const E_HARDWARE_MAPPING EHM_DEFAULT = EHM_STATIC;
+#else
+	const E_HARDWARE_MAPPING EHM_DEFAULT = EHM_NEVER;
+#endif
+
 } // end namespace scene
 } // end namespace irr
 
