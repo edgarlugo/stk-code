@@ -2224,6 +2224,7 @@ extern "C" {
 void vglSetParamBufferSize(uint32_t size);
 GLboolean vglInitWithCustomThreshold(int pool_size, int width, int height, int ram_threshold, int cdram_threshold, int phycont_threshold, int cdlg_threshold, SceGxmMultisampleMode msaa);
 void vglSetCircularPoolSize(uint32_t size);
+void vglSetDisplayCallback(void (*cb)(void *framebuf));
 
 int __real_pthread_create(pthread_t * tid, const pthread_attr_t * attr, void *(*start) (void *), void *arg);
 int __wrap_pthread_create(pthread_t * tid, const pthread_attr_t * _attr, void *(*start) (void *), void *arg) {
@@ -2235,6 +2236,75 @@ int __wrap_pthread_create(pthread_t * tid, const pthread_attr_t * _attr, void *(
 }
 };
 #include <SDL2/SDL.h>
+
+// FPS counter drawn by the CPU over every frame sent to the display, shown with
+// Options > User Interface > Display FPS. Counting frames at the display keeps it
+// exact and independent from the GUI, which is drawn only when the game renders.
+static const uint8_t vita_fps_glyphs[13][7] = {
+    { 0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E }, // 0
+    { 0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E }, // 1
+    { 0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F }, // 2
+    { 0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E }, // 3
+    { 0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02 }, // 4
+    { 0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E }, // 5
+    { 0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E }, // 6
+    { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 }, // 7
+    { 0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E }, // 8
+    { 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C }, // 9
+    { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 }, // F
+    { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 }, // P
+    { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E }, // S
+};
+
+static void vitaDrawFPS(void *framebuf)
+{
+    static uint64_t last_time = 0;
+    static int frames = 0;
+    static int fps = 0;
+    uint64_t now = sceKernelGetProcessTimeWide();
+    frames++;
+    if (now - last_time >= 1000000)
+    {
+        fps = (int)((frames * 1000000ull + (now - last_time) / 2) / (now - last_time));
+        frames = 0;
+        last_time = now;
+    }
+    if (!UserConfigParams::m_display_fps)
+        return;
+
+    // Glyph indices for "<fps> FPS", -1 is a space
+    int text[8], len = 0;
+    char digits[4];
+    int ndigits = snprintf(digits, sizeof(digits), "%d", fps > 999 ? 999 : fps);
+    for (int i = 0; i < ndigits; i++)
+        text[len++] = digits[i] - '0';
+    text[len++] = -1;
+    text[len++] = 10;
+    text[len++] = 11;
+    text[len++] = 12;
+
+    const int scale = 3, stride = 960, x0 = 12, y0 = 12;
+    const int w = len * 6 * scale + scale, h = 9 * scale;
+    uint32_t *fb = (uint32_t *)framebuf;
+    for (int y = y0 - scale; y < y0 - scale + h; y++)
+        for (int x = x0 - scale; x < x0 - scale + w; x++)
+            fb[y * stride + x] = 0xFF000000; // black box
+    for (int c = 0; c < len; c++)
+    {
+        if (text[c] < 0)
+            continue;
+        for (int row = 0; row < 7; row++)
+            for (int col = 0; col < 5; col++)
+            {
+                if (!(vita_fps_glyphs[text[c]][row] & (0x10 >> col)))
+                    continue;
+                for (int sy = 0; sy < scale; sy++)
+                    for (int sx = 0; sx < scale; sx++)
+                        fb[(y0 + row * scale + sy) * stride + x0 + (c * 6 + col) * scale + sx] = 0xFF00FFFF; // yellow
+            }
+    }
+}   // vitaDrawFPS
+
 void *real_main(char *argv[]);
 int main(int argc, char *argv[]) {
 	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
@@ -2252,6 +2322,7 @@ void *real_main(char *argv[]) {
 	vglSetParamBufferSize(6 * 1024 * 1024);
 	vglSetCircularPoolSize(30 * 1024 * 1024);
 	vglInitWithCustomThreshold(0, 960, 544, 12 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
+	vglSetDisplayCallback(vitaDrawFPS);
 	int argc = 0;
 #else
 int main(int argc, char *argv[]) {

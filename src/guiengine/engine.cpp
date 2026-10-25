@@ -1420,8 +1420,10 @@ namespace GUIEngine
             }
         }
 
-        // draw FPS if enabled
+        // draw FPS if enabled (on Vita it is drawn over the display frame, see main.cpp)
+#ifndef __vita__
         if ( UserConfigParams::m_display_fps ) irr_driver->displayFPS();
+#endif
 
         // draw speedrun timer if enabled
         if ( UserConfigParams::m_speedrun_mode ) irr_driver->displayStoryModeTimer();
