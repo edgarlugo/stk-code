@@ -25,9 +25,9 @@ CEmptySceneNode::CEmptySceneNode(ISceneNode* parent, ISceneManager* mgr, s32 id)
 //! pre render event
 void CEmptySceneNode::OnRegisterSceneNode()
 {
-	if (IsVisible)
-		SceneManager->registerNodeForRendering(this);
-
+	// Nothing to draw: registering this node only cost a culling test, a slot in the
+	// sorted solid node list and an empty render() call. Tracks group every library
+	// object under an empty node, so there can be thousands of them.
 	ISceneNode::OnRegisterSceneNode();
 }
 
