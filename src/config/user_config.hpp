@@ -963,7 +963,7 @@ namespace UserConfigParams
                                                 "Graphics Quality Settings") );
 
     PARAM_PREFIX IntUserConfigParam        m_particles_effects
-            PARAM_DEFAULT(  IntUserConfigParam(GFX_DEFAULT(2, 0), "particles-effecs",
+            PARAM_DEFAULT(  IntUserConfigParam(GFX_DEFAULT(2, 1), "particles-effecs",
                             &m_graphics_quality, "Particles effects: 0 disabled, 1 only important, 2 enabled") );
 
     // This saves the actual user preference.
