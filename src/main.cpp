@@ -2272,12 +2272,16 @@ static void vitaDrawFPS(void *framebuf)
     if (!UserConfigParams::m_display_fps)
         return;
 
-    // Glyph indices for "<fps> FPS", -1 is a space
+    // Glyph indices for "<fps> FPS", -1 is a space. This runs on the display queue
+    // thread, which newlib did not create: no libc calls here (the first one on such
+    // a thread allocates its reentrancy data, which can deadlock with the main thread).
     int text[8], len = 0;
-    char digits[4];
-    int ndigits = snprintf(digits, sizeof(digits), "%d", fps > 999 ? 999 : fps);
-    for (int i = 0; i < ndigits; i++)
-        text[len++] = digits[i] - '0';
+    const int shown = fps > 999 ? 999 : fps;
+    if (shown >= 100)
+        text[len++] = shown / 100;
+    if (shown >= 10)
+        text[len++] = shown / 10 % 10;
+    text[len++] = shown % 10;
     text[len++] = -1;
     text[len++] = 10;
     text[len++] = 11;
