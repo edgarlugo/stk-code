@@ -89,6 +89,10 @@ Shadow::Shadow(Material* shadow_mat, const AbstractKart& kart)
         buffer->setTCoords(3, core::vector2df(0.0f, 1.0f));
         shadow_mat->setMaterialProperties(&buffer->getMaterial(), buffer);
         buffer->getMaterial().setTexture(0, shadow_mat->getTexture());
+        // The quad lies 0.02 above the ground: without a depth bias the track
+        // hides it (z-fighting), and the karts showed no shadow at all
+        buffer->getMaterial().PolygonOffsetFactor = 7;
+        buffer->getMaterial().PolygonOffsetDirection = video::EPO_FRONT;
         buffer->setHardwareMappingHint(scene::EHM_STREAM);
         scene::SMesh* mesh = new scene::SMesh();
         mesh->addMeshBuffer(buffer);
