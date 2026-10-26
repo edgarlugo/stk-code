@@ -2310,15 +2310,24 @@ static void vitaDrawFPS(void *framebuf)
 }   // vitaDrawFPS
 
 void *real_main(char *argv[]);
+static void *vitaGameThread(void *)
+{
+    real_main(NULL);
+    // vitaGL, network and audio threads would keep the process alive with
+    // the last frame on screen: end it as returning from main would
+    sceKernelExitProcess(0);
+    return NULL;
+}   // vitaGameThread
+
 int main(int argc, char *argv[]) {
 	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
 	scePowerSetArmClockFrequency(444);
     scePowerSetBusClockFrequency(222);
     scePowerSetGpuClockFrequency(222);
     scePowerSetGpuXbarClockFrequency(166);
-	
+
 	pthread_t t;
-	pthread_create(&t, NULL, (void* (*)(void*))real_main, NULL);
+	pthread_create(&t, NULL, vitaGameThread, NULL);
 
 	return sceKernelExitDeleteThread(0);
 }
