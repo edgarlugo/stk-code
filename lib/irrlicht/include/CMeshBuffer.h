@@ -268,6 +268,12 @@ namespace scene
 				++ChangedID_Index;
 		}
 
+		//! Only the Vulkan buffers upload from the offset: here the whole buffer is uploaded again
+		virtual void setDirtyOffset(u32 offset, E_BUFFER_TYPE Buffer=EBT_VERTEX_AND_INDEX)
+		{
+			setDirty(Buffer);
+		}
+
 		//! Get the currently used ID for identification of changes.
 		/** This shouldn't be used for anything outside the VideoDriver. */
 		virtual u32 getChangedID_Vertex() const {return ChangedID_Vertex;}
