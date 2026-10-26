@@ -78,6 +78,11 @@ void CReadFile::openFile()
 
 	if (File)
 	{
+#ifdef __vita__
+		// The default 1 KB stdio buffer turns every model or texture into hundreds
+		// of sceIoRead calls, each costing far more than the data it copies
+		setvbuf(File, NULL, _IOFBF, 64 * 1024);
+#endif
 		// get FileSize, check for errors
 		// See https://stackoverflow.com/questions/18192998/plain-c-opening-a-directory-with-fopen
 
