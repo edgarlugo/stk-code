@@ -1771,6 +1771,22 @@ namespace video
 				BridgeCalls->setCullFace(false);
 		}
 
+		// Polygon offset (same as the desktop OpenGL driver), e.g. for decals lying on another surface
+		if (resetAllRenderStates || lastmaterial.PolygonOffsetDirection != material.PolygonOffsetDirection ||
+			lastmaterial.PolygonOffsetFactor != material.PolygonOffsetFactor)
+		{
+			if (material.PolygonOffsetFactor)
+			{
+				glEnable(GL_POLYGON_OFFSET_FILL);
+				if (material.PolygonOffsetDirection == EPO_BACK)
+					glPolygonOffset(1.0f, (GLfloat)material.PolygonOffsetFactor);
+				else
+					glPolygonOffset(-1.0f, (GLfloat)-material.PolygonOffsetFactor);
+			}
+			else
+				glDisable(GL_POLYGON_OFFSET_FILL);
+		}
+
 		// Color Mask
 		if (resetAllRenderStates || lastmaterial.ColorMask != material.ColorMask)
 		{
