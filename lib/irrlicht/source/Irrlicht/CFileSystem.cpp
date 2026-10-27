@@ -613,6 +613,17 @@ bool CFileSystem::changeWorkingDirectoryTo(const io::path& newDirectory)
 }
 
 
+#ifdef __VITA__
+//! Vita paths start with a device ("ux0:data/x"), realpath turns them into "ux0:/data/x"
+static io::path slashAfterDevice(const io::path& filename)
+{
+	const s32 colon = filename.findFirst(':');
+	if (colon < 0 || colon + 1 >= (s32)filename.size() || filename[colon + 1] == '/')
+		return filename;
+	return filename.subString(0, colon + 1) + "/" + filename.subString(colon + 1, filename.size() - colon - 1);
+}
+#endif
+
 io::path CFileSystem::getAbsolutePath(const io::path& filename) const
 {
 #ifdef __SWITCH__
@@ -627,6 +638,12 @@ io::path CFileSystem::getAbsolutePath(const io::path& filename) const
 	tmp.replace(L'\\', L'/');
 	return StringUtils::wideToUtf8(tmp).c_str();
 #elif (defined(_IRR_POSIX_API_) || defined(_IRR_OSX_PLATFORM_))
+#ifdef __VITA__
+	// realpath stats the file, which costs milliseconds on the memory card. An absolute
+	// path with nothing to resolve only needs the "ux0:data" -> "ux0:/data" form realpath gives
+	if (filename.findFirst(':') > 0 && filename.find("/.") < 0 && filename.find("//") < 0)
+		return slashAfterDevice(filename);
+#endif
 	c8* p=0;
 	c8 fpath[4096];
 	fpath[0]=0;
@@ -898,6 +915,11 @@ IFileList* CFileSystem::createFileList(const io::path& directory)
 				{
 					continue;
 				}
+				#ifdef __VITA__
+				// readdir already returns the entry status, a stat per file is slow
+				size = dirEntry->d_stat.st_size;
+				isDirectory = SCE_S_ISDIR(dirEntry->d_stat.st_mode);
+				#else
 				struct stat buf;
 				if (stat(dirEntry->d_name, &buf)==0)
 				{
@@ -910,6 +932,7 @@ IFileList* CFileSystem::createFileList(const io::path& directory)
 				{
 					isDirectory = dirEntry->d_type == DT_DIR;
 				}
+				#endif
 				#endif
 
 				r->addItem(Path + dirEntry->d_name, 0, size, isDirectory, 0);
@@ -983,6 +1006,26 @@ bool CFileSystem::existFile(const io::path& filename) const
 	for (u32 i=0; i < FileArchives.size(); ++i)
 		if (FileArchives[i]->getFileList()->findFile(filename)!=-1)
 			return true;
+#ifdef __VITA__
+	// A mounted folder lists every file below it (names relative to the folder), so
+	// answer from that list: a stat on the memory card costs milliseconds.
+	// Folders are mounted with their realpath ("ux0:/data/..."), STK asks for "ux0:data/..."
+	// and often joins a search path and a name with "//". Paths with "." or ".." go to the card
+	io::path name = slashAfterDevice(filename);
+	while (name.find("//") >= 0)
+		name.replace(io::path("//"), io::path("/"));
+	for (u32 i=0; i < FileArchives.size() && name.find("/.") < 0; ++i)
+	{
+		const IFileList* list = FileArchives[i]->getFileList();
+		const io::path& base = list->getPath();
+		if (FileArchives[i]->getType() == EFAT_FOLDER && name.size() > base.size() &&
+			name.equalsn(base, base.size()))
+		{
+			const io::path rel = name.subString(base.size(), name.size() - base.size());
+			return list->findFile(rel) != -1 || list->findFile(rel, true) != -1;
+		}
+	}
+#endif
 	ul.unlock();
 
 #if defined(_IRR_WINDOWS_CE_PLATFORM_)
