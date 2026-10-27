@@ -1749,6 +1749,25 @@ int handleCmdLine(bool has_server_config, bool has_parent_process)
         UserConfigParams::m_race_now = true;
     }   // --race-now
 
+    // The soccer setup screen sets the match target and the AI teams, a match
+    // started from the command line had neither: with a goal target of 0 the
+    // match is over at once, the AI data is never filled and the AI crashes
+    if (UserConfigParams::m_race_now &&
+        RaceManager::get()->getMinorMode() == RaceManager::MINOR_MODE_SOCCER)
+    {
+        if (!RaceManager::get()->hasTimeTarget() && RaceManager::get()->getMaxGoal() == 0)
+        {
+            if (UserConfigParams::m_soccer_use_time_limit)
+                RaceManager::get()->setTimeTarget(UserConfigParams::m_soccer_time_limit * 60.0f);
+            else
+                RaceManager::get()->setMaxGoal(UserConfigParams::m_num_goals);
+        }
+        // The player joins the blue team, the AI karts fill both
+        const int num_karts = RaceManager::get()->getNumberOfKarts();
+        RaceManager::get()->setNumRedAI(num_karts / 2);
+        RaceManager::get()->setNumBlueAI(num_karts - 1 - num_karts / 2);
+    }
+
     if(CommandLine::has( "--use-keyboard",&n)) {
         UserConfigParams::m_default_keyboard = n;
     } //--use-keyboard
