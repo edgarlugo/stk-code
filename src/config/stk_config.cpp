@@ -196,7 +196,30 @@ void STKConfig::load(const std::string &filename)
 
     // Square distance to make distance checks cheaper (no sqrt)
     m_default_kart_properties->checkAllSet(filename);
+
+    m_config_physics_fps = m_physics_fps;
+    m_config_ticks = { m_bonusbox_item_return_ticks, m_nitro_item_return_ticks,
+                       m_banana_item_return_ticks,
+                       m_bubblegum_item_return_ticks, m_item_switch_ticks,
+                       m_penalty_ticks };
 }   // load
+
+// ----------------------------------------------------------------------------
+/** Changes the physics rate and converts the times that are stored in ticks.
+ *  The conversion starts from the values of the config file, so going back
+ *  to its rate gives exactly the same ticks.
+ *  \param fps Number of physics steps per second.
+ */
+void STKConfig::setPhysicsFPS(int fps)
+{
+    int *ticks[] = { &m_bonusbox_item_return_ticks, &m_nitro_item_return_ticks,
+                     &m_banana_item_return_ticks,
+                     &m_bubblegum_item_return_ticks, &m_item_switch_ticks,
+                     &m_penalty_ticks };
+    for (unsigned int i = 0; i < m_config_ticks.size(); i++)
+        *ticks[i] = m_config_ticks[i] * fps / m_config_physics_fps;
+    m_physics_fps = fps;
+}   // setPhysicsFPS
 
 // -----------------------------------------------------------------------------
 /** Init all values with invalid defaults, which are tested later. This

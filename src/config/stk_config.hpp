@@ -282,6 +282,11 @@ private:
     /** Default FPS rate for physics. */
     int m_physics_fps;
 
+    /** Physics rate of the config file and the times above that are stored
+     *  in ticks, used to convert them when the rate is changed. */
+    int m_config_physics_fps;
+    std::vector<int> m_config_ticks;
+
     std::string m_title_music_file;
     std::string m_default_music_file;
     std::string m_race_win_music_file;
@@ -302,6 +307,7 @@ public:
     void validateBenchmarkReplays();
     void initMusicFiles();
     void  getAllScores(std::vector<int> *all_scores, int num_karts);
+    void  setPhysicsFPS(int fps);
     // ------------------------------------------------------------------------
     /** Returns the default kart properties for each kart. */
     const KartProperties &
@@ -325,6 +331,9 @@ public:
     // ------------------------------------------------------------------------
     /** Returns the physics frame per seconds rate. */
     int getPhysicsFPS() const { return m_physics_fps; }
+    // ------------------------------------------------------------------------
+    /** Returns the physics frame per seconds rate of the config file. */
+    int getConfigPhysicsFPS() const { return m_config_physics_fps; }
 }
 ;   // STKConfig
 

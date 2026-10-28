@@ -642,6 +642,14 @@ void RaceManager::startNextRace()
 
     main_loop->renderGUI(100);
 
+#ifdef __VITA__
+    // With several karts the physics and AI updates take most of the frame,
+    // so half the rate nearly doubles the frame rate. Network games have to
+    // use the rate of the server.
+    stk_config->setPhysicsFPS(NetworkConfig::get()->isNetworking() ?
+                              stk_config->getConfigPhysicsFPS() : 60);
+#endif
+
     // the constructor assigns this object to the global
     // variable world. Admittedly a bit ugly, but simplifies
     // handling of objects which get created in the constructor
