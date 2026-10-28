@@ -417,6 +417,9 @@ void WorldStatus::updateTime(int ticks)
             {
                 music_manager->startMusic();
                 UserConfigParams::m_race_now = false;
+                // The countdown that calls it was skipped: without it the
+                // brakes stay on and the soccer ball is never enabled
+                onGo();
             }
             if (m_race_ticks != -1 && m_count_up_ticks >= m_race_ticks)
             {
