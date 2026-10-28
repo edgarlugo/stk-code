@@ -176,6 +176,9 @@ public:
     // ------------------------------------------------------------------------
     bool isSoccerBall() const { return m_soccer_ball; }
     // ------------------------------------------------------------------------
+    const std::string& getVisibilityCondition() const
+                                            { return m_visibility_condition; }
+    // ------------------------------------------------------------------------
     const PhysicalObject* getPhysicalObject() const
                                             { return m_physical_object.get(); }
     // ------------------------------------------------------------------------

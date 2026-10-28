@@ -175,6 +175,14 @@ public:
     const scene::ISceneNode* getNode() const { return m_node; }
     // ------------------------------------------------------------------------
     bool isAlwaysHidden() const { return m_force_always_hidden; }
+    // ------------------------------------------------------------------------
+    /** Hides the node for good, e.g. when another node draws it. */
+    void setAlwaysHidden()
+    {
+        m_force_always_hidden = true;
+        if (m_node != NULL)
+            m_node->setVisible(false);
+    }
 };   // class TrackObjectPresentationSceneNode
 
 // ============================================================================

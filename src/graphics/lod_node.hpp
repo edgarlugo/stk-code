@@ -116,6 +116,12 @@ public:
 
     void forceLevelOfDetail(int n);
 
+    /** Squared distances up to which each level is shown */
+    const std::vector<int>& getDetail() const { return m_detail; }
+    void setDetail(const std::vector<int>& detail) { m_detail = detail; }
+    /** A level shown only closer than this squared distance is skipped */
+    int getMinSwitchDistance() const { return m_min_switch_distance; }
+
     /** Get the highest level of detail node */
     scene::ISceneNode* getFirstNode()
     {

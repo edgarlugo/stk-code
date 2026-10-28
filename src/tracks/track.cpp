@@ -98,6 +98,8 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <sstream>
 #include <wchar.h>
@@ -360,6 +362,10 @@ void Track::cleanup()
         irr_driver->removeNode(m_all_nodes[i]);
     }
     m_all_nodes.clear();
+
+    for (unsigned int i = 0; i < m_merged_nodes.size(); i++)
+        irr_driver->removeNode(m_merged_nodes[i]);
+    m_merged_nodes.clear();
 
     for (unsigned int i = 0; i < m_static_physics_only_nodes.size(); i++)
     {
@@ -1619,6 +1625,285 @@ void Track::freeCachedMeshVertexBuffer()
     }
 }   // freeCachedMeshVertexBuffer
 
+#ifdef __vita__
+// ----------------------------------------------------------------------------
+/** The fixed pipeline walks, culls and draws every object of a track through
+ *  its own scene nodes: Black Forest has ~3000 meshes under ~1500 LOD nodes,
+ *  which is most of a frame on the Vita. The static objects of each area are
+ *  merged into one mesh per material (objects with levels of detail into one
+ *  LOD node per area), and their own nodes are hidden.
+ */
+void Track::mergeStaticObjects()
+{
+    const float cell_size = 40.0f;
+    scene::ISceneManager* sm = irr_driver->getSceneManager();
+
+    // Objects a script may hide or move are left alone: the track script
+    // finds them by id, a library script through its library instance
+    std::string script;
+    FILE* fp = fopen(getTrackFile("scripting.as").c_str(), "rb");
+    if (fp)
+    {
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), fp)) > 0)
+            script.append(buf, n);
+        fclose(fp);
+    }
+    std::map<std::string, bool> library_scripts;
+    auto scripted = [&](TrackObject* to)
+    {
+        for (TrackObject* o = to; o != NULL; o = o->getParentLibrary())
+        {
+            if (!o->getID().empty() &&
+                script.find("\"" + o->getID() + "\"") != std::string::npos)
+                return true;
+            if (o == to)
+                continue;
+            auto it = library_scripts.find(o->getName());
+            if (it == library_scripts.end())
+            {
+                const std::string& name = o->getName();
+                bool has_script = file_manager->fileExists(
+                    getTrackFile("library/" + name + "/scripting.as")) ||
+                    file_manager->fileExists(file_manager->getAsset(
+                    FileManager::LIBRARY, name) + "/scripting.as");
+                it = library_scripts.insert(std::make_pair(name,
+                                                           has_script)).first;
+            }
+            if (it->second)
+                return true;
+        }
+        return false;
+    };
+
+    std::set<const core::matrix4*> animated_textures;
+    for (MovingTexture* mt : m_animated_textures)
+        animated_textures.insert(mt->getTextureMatrix());
+
+    // A mesh drawn with the materials of its buffers, without blending
+    // (the draw order of blended objects matters) and without moving textures
+    auto mergeable = [&](scene::ISceneNode* node)
+    {
+        if (node->getType() != scene::ESNT_MESH || !node->getChildren().empty())
+            return false;
+        scene::IMesh* mesh = ((scene::IMeshSceneNode*)node)->getMesh();
+        if (mesh == NULL || mesh->getMeshBufferCount() != node->getMaterialCount())
+            return false;
+        for (u32 i = 0; i < mesh->getMeshBufferCount(); i++)
+        {
+            const video::SMaterial& m = node->getMaterial(i);
+            if (m != mesh->getMeshBuffer(i)->getMaterial())
+                return false;
+            if (m.isTransparent() &&
+                m.MaterialType != video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF)
+                return false;
+            for (u32 j = 0; j < video::MATERIAL_MAX_TEXTURES; j++)
+            {
+                if (animated_textures.count(&m.getTextureMatrix(j)))
+                    return false;
+            }
+        }
+        return true;
+    };
+
+    // The node and its parents must be shown and in the scene; their
+    // absolute transformations are updated on the way
+    auto in_scene = [sm](scene::ISceneNode* node)
+    {
+        std::vector<scene::ISceneNode*> chain;
+        for (scene::ISceneNode* n = node; n != NULL; n = n->getParent())
+        {
+            if (!n->isVisible())
+                return false;
+            chain.push_back(n);
+        }
+        if (chain.back() != sm->getRootSceneNode())
+            return false;
+        for (auto it = chain.rbegin(); it != chain.rend(); it++)
+            (*it)->updateAbsolutePosition();
+        return true;
+    };
+
+    // Each object is a list of levels: a node and the squared distance up to
+    // which it is shown (-1: always)
+    typedef std::vector<std::pair<scene::ISceneNode*, int> > Levels;
+    std::map<uint64_t, std::vector<Levels> > mesh_cells, lod_cells;
+    std::vector<TrackObjectPresentationSceneNode*> merged;
+    for (TrackObject* to : m_track_object_manager->getObjects().m_contents_vector)
+    {
+        if (!to->isEnabled() || to->hasAnimatorRecursively() ||
+            to->isSoccerBall() || !to->getVisibilityCondition().empty() ||
+            (to->getPhysicalObject() && to->getPhysicalObject()->isDynamic()) ||
+            scripted(to))
+            continue;
+        TrackObjectPresentationSceneNode* p = NULL;
+        Levels levels;
+        if (TrackObjectPresentationLOD* pl =
+            to->getPresentation<TrackObjectPresentationLOD>())
+        {
+            LODNode* lod = dynamic_cast<LODNode*>(pl->getNode());
+            if (lod == NULL || pl->isAlwaysHidden() || !in_scene(lod) ||
+                lod->getChildren().size() != lod->getAllNodes().size())
+                continue;
+            const std::vector<int>& detail = lod->getDetail();
+            for (unsigned i = 0; i < detail.size(); i++)
+            {
+                // getLevel skips a level that would only be shown too close
+                if (i + 1 < detail.size() &&
+                    lod->getMinSwitchDistance() >= detail[i])
+                    continue;
+                levels.emplace_back(lod->getAllNodes()[i], detail[i]);
+            }
+            p = pl;
+        }
+        else if (TrackObjectPresentationMesh* pm =
+                 to->getPresentation<TrackObjectPresentationMesh>())
+        {
+            if (pm->getNode() == NULL || pm->isAlwaysHidden() ||
+                !in_scene(pm->getNode()))
+                continue;
+            levels.emplace_back(pm->getNode(), -1);
+            p = pm;
+        }
+        if (p == NULL || levels.empty())
+            continue;
+        bool ok = true;
+        for (auto& level : levels)
+        {
+            level.first->updateAbsolutePosition();
+            ok = ok && mergeable(level.first);
+        }
+        if (!ok)
+            continue;
+
+        const core::vector3df pos = p->getNode()->getAbsolutePosition();
+        const uint64_t key =
+            (uint64_t)(u16)(s16)floorf(pos.X / cell_size) << 32 |
+            (uint64_t)(u16)(s16)floorf(pos.Y / cell_size) << 16 |
+            (uint64_t)(u16)(s16)floorf(pos.Z / cell_size);
+        (levels[0].second < 0 ? mesh_cells : lod_cells)[key].push_back(levels);
+        merged.push_back(p);
+    }
+
+    auto cell_center = [cell_size](uint64_t key)
+    {
+        return core::vector3df((s16)(u16)(key >> 32) + 0.5f,
+                               (s16)(u16)(key >> 16) + 0.5f,
+                               (s16)(u16)key + 0.5f) * cell_size;
+    };
+    // The meshes of the nodes in one mesh, around the center of their area
+    int merged_vertices = 0, merged_bytes = 0;
+    auto merge = [&](const std::vector<scene::ISceneNode*>& nodes,
+                     const core::vector3df& center)
+    {
+        scene::CBatchingMesh* mesh = new scene::CBatchingMesh();
+        core::matrix4 to_cell;
+        to_cell.setTranslation(-center);
+        for (scene::ISceneNode* node : nodes)
+        {
+            mesh->addMesh(((scene::IMeshSceneNode*)node)->getMesh(),
+                          to_cell * node->getAbsoluteTransformation());
+        }
+        mesh->finalize();
+        for (u32 i = 0; i < mesh->getMeshBufferCount(); i++)
+        {
+            scene::IMeshBuffer* mb = mesh->getMeshBuffer(i);
+            merged_vertices += mb->getVertexCount();
+            merged_bytes += mb->getVertexCount() *
+                video::getVertexPitchFromType(mb->getVertexType()) +
+                mb->getIndexCount() * 2;
+        }
+        return mesh;
+    };
+
+    for (auto& cell : mesh_cells)
+    {
+        std::vector<scene::ISceneNode*> nodes;
+        for (const Levels& levels : cell.second)
+            nodes.push_back(levels[0].first);
+        const core::vector3df center = cell_center(cell.first);
+        scene::IMesh* mesh = merge(nodes, center);
+        scene::ISceneNode* node = irr_driver->addMesh(mesh, "merged");
+        mesh->drop();
+        node->setPosition(center);
+        m_merged_nodes.push_back(node);
+    }
+    for (auto& cell : lod_cells)
+    {
+        // Level n of the area holds level n of the objects that have it, up
+        // to the farthest distance of these: no object disappears sooner
+        unsigned num_levels = 0;
+        for (const Levels& levels : cell.second)
+            num_levels = std::max(num_levels, (unsigned)levels.size());
+        const core::vector3df center = cell_center(cell.first);
+        LODNode* lod = new LODNode("merged", sm->getRootSceneNode(), sm);
+        lod->setPosition(center);
+        std::vector<int> detail;
+        for (unsigned n = 0; n < num_levels; n++)
+        {
+            std::vector<scene::ISceneNode*> nodes;
+            int distance = detail.empty() ? 0 : detail.back();
+            for (const Levels& levels : cell.second)
+            {
+                if (n >= levels.size())
+                    continue;
+                nodes.push_back(levels[n].first);
+                distance = std::max(distance, levels[n].second);
+            }
+            scene::IMesh* mesh = merge(nodes, center);
+            scene::ISceneNode* node = irr_driver->addMesh(mesh, "merged");
+            mesh->drop();
+            lod->add(0, node, true);
+            detail.push_back(distance);
+        }
+        lod->setDetail(detail);
+        m_merged_nodes.push_back(lod);
+    }
+    std::set<scene::ISceneNode*> hidden;
+    for (TrackObjectPresentationSceneNode* p : merged)
+    {
+        p->setAlwaysHidden();
+        hidden.insert(p->getNode());
+    }
+
+    // Library instances left with nothing to show are hidden too, or walking
+    // their nodes every frame would still cost most of what merging saved
+    std::map<scene::ISceneNode*, TrackObjectPresentationSceneNode*> libraries;
+    for (TrackObject* to : m_track_object_manager->getObjects().m_contents_vector)
+    {
+        TrackObjectPresentationLibraryNode* pl =
+            to->getPresentation<TrackObjectPresentationLibraryNode>();
+        if (pl != NULL && pl->getNode() != NULL)
+            libraries[pl->getNode()] = pl;
+    }
+    int hidden_libraries = 0;
+    for (bool changed = true; changed;)
+    {
+        changed = false;
+        for (auto& library : libraries)
+        {
+            const auto& children = library.first->getChildren();
+            if (hidden.count(library.first) || children.empty())
+                continue;
+            bool empty = true;
+            for (u32 i = 0; i < children.size() && empty; i++)
+                empty = hidden.count(children[i]) > 0;
+            if (!empty)
+                continue;
+            library.second->setAlwaysHidden();
+            hidden.insert(library.first);
+            hidden_libraries++;
+            changed = true;
+        }
+    }
+    Log::info("Track", "Merged %d static objects into %d nodes, %d vertices "
+              "(%d KB), %d library instances hidden.", (int)merged.size(),
+              (int)m_merged_nodes.size(), merged_vertices,
+              merged_bytes / 1024, hidden_libraries);
+}   // mergeStaticObjects
+#endif
+
 // ----------------------------------------------------------------------------
 /** Handles animated textures.
  *  \param node The scene node for which animated textures are handled.
@@ -2322,6 +2607,10 @@ void Track::loadTrackModel(bool reverse_track, unsigned int mode_id)
     }
     createPhysicsModel(main_track_count, false/*for_height_map*/);
 
+#ifdef __vita__
+    if (!GUIEngine::isNoGraphics())
+        mergeStaticObjects();
+#endif
     main_loop->renderGUI(5600);
 
     freeCachedMeshVertexBuffer();

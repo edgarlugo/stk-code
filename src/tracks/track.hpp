@@ -160,6 +160,9 @@ private:
     /** The list of all nodes. */
     std::vector<scene::ISceneNode*> m_all_nodes;
 
+    /** Nodes drawing the static objects merged by mergeStaticObjects. */
+    std::vector<scene::ISceneNode*> m_merged_nodes;
+
     /** The list of all nodes that are to be converted into physics,
      *  but not to be drawn (e.g. invisible walls). */
     std::vector<scene::ISceneNode*> m_static_physics_only_nodes;
@@ -423,6 +426,7 @@ private:
     void loadCurves(const XMLNode &node);
     void handleSky(const XMLNode &root, const std::string &filename);
     void freeCachedMeshVertexBuffer();
+    void mergeStaticObjects();
     void copyFromMainProcess();
     video::IImage* getSkyTexture(std::string path) const;
     scene::IMesh* getClonedMesh(const std::string& filename) const;
