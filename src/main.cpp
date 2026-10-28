@@ -2353,7 +2353,8 @@ int main(int argc, char *argv[]) {
 void *real_main(char *argv[]) {
 	vglSetParamBufferSize(6 * 1024 * 1024);
 	vglSetCircularPoolSize(30 * 1024 * 1024);
-	vglInitWithCustomThreshold(0, 960, 544, 12 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
+	// 4x MSAA costs ~6 ms of GPU per frame in the heavy tracks, 2x looks almost the same
+	vglInitWithCustomThreshold(0, 960, 544, 12 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_2X);
 	vglSetDisplayCallback(vitaDrawFPS);
 	int argc = 0;
 #else
