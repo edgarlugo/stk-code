@@ -406,7 +406,12 @@ public:
     {
         if (getPreviousOwner() == kart && getDeactivatedTicks() > 0)
             return false;
-        Vec3 lc = quatRotate(getOriginalRotation(), xyz - getXYZ());
+        Vec3 d = xyz - getXYZ();
+        // The rotation keeps the length and halving Y below at most quarters
+        // it, so items that are far away can be skipped without rotating.
+        if (d.length2() >= 4.0f * m_distance_2)
+            return false;
+        Vec3 lc = quatRotate(getOriginalRotation(), d);
         // Don't be too strict if the kart is a bit above the item
         lc.setY(lc.getY() / 2.0f);
         return lc.length2() < m_distance_2;
