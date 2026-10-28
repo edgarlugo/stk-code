@@ -2621,7 +2621,7 @@ static char *   norm_path(
 
     if (strncmp( cp1, "./", 2) == 0)    /* Remove beginning "./"    */
         memmove( cp1, cp1 + 2, strlen( cp1 + 2) + 1);       /* +1 for EOS   */
-    if (*start != '/') {    /* Relative path to current directory   */
+    if (*start != '/' && ! is_full_path( start)) {  /* Relative path   */
         /* Make absolute path   */
         abs_path = xmalloc( len + strlen( cur_work_dir) + 1);
         cp1 = stpcpy( abs_path, cur_work_dir);
@@ -3331,6 +3331,10 @@ static int  is_full_path(
     if (path[0] == PATH_DELIM)
 #endif
         return  TRUE;
+#if defined(__VITA__)
+    else if (strchr( path, ':'))    /* "ux0:data/path" names a device   */
+        return  TRUE;
+#endif
     else
         return  FALSE;
 }
