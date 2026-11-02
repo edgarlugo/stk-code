@@ -56,13 +56,21 @@ protected:
     std::vector<TrackObject*> m_objects_to_update;
     static bool m_update_list_dirty;
 
+    /** The same for updateGraphics(), which runs once per frame. */
+    std::vector<TrackObject*> m_objects_to_update_graphics;
+    static bool m_update_graphics_list_dirty;
+
 public:
          TrackObjectManager();
         ~TrackObjectManager();
     void reset();
     void init();
     /** Called when the list of objects to update might be outdated. */
-    static void markUpdateListDirty() { m_update_list_dirty = true; }
+    static void markUpdateListDirty()
+    {
+        m_update_list_dirty = true;
+        m_update_graphics_list_dirty = true;
+    }
     void add(const XMLNode &xml_node, scene::ISceneNode* parent,
              ModelDefinitionLoader& model_def_loader,
              TrackObject* parent_library);

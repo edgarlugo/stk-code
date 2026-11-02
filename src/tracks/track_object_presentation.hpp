@@ -92,6 +92,8 @@ public:
         Log::warn("TrackObjectPresentation", "setEnable unimplemented for this presentation type");
     }
     virtual void updateGraphics(float dt) {}
+    /** True if updateGraphics() does something for this presentation. */
+    virtual bool needsUpdateGraphics() const { return false; }
     virtual void update(float dt) {}
     /** True if update() can still do something. */
     virtual bool needsUpdate() const { return false; }
@@ -308,6 +310,7 @@ public:
     virtual ~TrackObjectPresentationSound();
     void onTriggerItemApproached(int kart_id);
     virtual void updateGraphics(float dt) OVERRIDE;
+    virtual bool needsUpdateGraphics() const OVERRIDE { return true; }
     virtual void move(const core::vector3df& xyz, const core::vector3df& hpr,
         const core::vector3df& scale, bool isAbsoluteCoord) OVERRIDE;
     void triggerSound(bool loop);
@@ -338,6 +341,7 @@ public:
                                      scene::ISceneNode* parent);
     virtual ~TrackObjectPresentationBillboard();
     virtual void updateGraphics(float dt) OVERRIDE;
+    virtual bool needsUpdateGraphics() const OVERRIDE { return true; }
 };   // TrackObjectPresentationBillboard
 
 
@@ -362,6 +366,7 @@ public:
     virtual ~TrackObjectPresentationParticles();
 
     virtual void updateGraphics(float dt) OVERRIDE;
+    virtual bool needsUpdateGraphics() const OVERRIDE { return true; }
     void triggerParticles();
     void stop();
     void stopIn(double delay);

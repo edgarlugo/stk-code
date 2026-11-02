@@ -130,6 +130,8 @@ public:
     /** True if update() can do something for this object. */
     bool needsUpdate() const;
     virtual void updateGraphics(float dt);
+    /** True if updateGraphics() can do something for this object. */
+    bool needsUpdateGraphics() const;
     virtual void resetAfterRewind();
     void move(const core::vector3df& xyz, const core::vector3df& hpr,
               const core::vector3df& scale, bool updateRigidBody,

@@ -40,10 +40,11 @@ TrackObjectManager::TrackObjectManager()
 
 // ----------------------------------------------------------------------------
 bool TrackObjectManager::m_update_list_dirty = true;
+bool TrackObjectManager::m_update_graphics_list_dirty = true;
 
 TrackObjectManager::~TrackObjectManager()
 {
-    m_update_list_dirty = true;
+    markUpdateListDirty();
 }   // ~TrackObjectManager
 
 // ----------------------------------------------------------------------------
@@ -58,7 +59,7 @@ void TrackObjectManager::add(const XMLNode &xml_node, scene::ISceneNode* parent,
     {
         TrackObject *obj = new TrackObject(xml_node, parent, model_def_loader, parent_library);
         m_all_objects.push_back(obj);
-        m_update_list_dirty = true;
+        markUpdateListDirty();
         if(obj->isDriveable())
             m_driveable_objects.push_back(obj);
     }
@@ -74,7 +75,7 @@ void TrackObjectManager::add(const XMLNode &xml_node, scene::ISceneNode* parent,
  */
 void TrackObjectManager::init()
 {
-    m_update_list_dirty = true;
+    markUpdateListDirty();
     int moveable_objects = 0;
     bool warned = false;
     for (unsigned i = 0; i < m_all_objects.m_contents_vector.size(); i++)
@@ -114,7 +115,7 @@ void TrackObjectManager::init()
  */
 void TrackObjectManager::reset()
 {
-    m_update_list_dirty = true;
+    markUpdateListDirty();
     for (TrackObject* curr : m_all_objects)
     {
         curr->reset();
@@ -183,10 +184,24 @@ void TrackObjectManager::handleExplosion(const Vec3 &pos, const PhysicalObject *
  */
 void TrackObjectManager::updateGraphics(float dt)
 {
-    TrackObject* curr;
-    for_in(curr, m_all_objects)
+    // Like update(), only go through the objects that do something here
+    if (m_update_graphics_list_dirty)
     {
-        curr->updateGraphics(dt);
+        m_update_graphics_list_dirty = false;
+        m_objects_to_update_graphics.clear();
+        TrackObject* curr;
+        for_in (curr, m_all_objects)
+        {
+            if (curr->needsUpdateGraphics())
+                m_objects_to_update_graphics.push_back(curr);
+        }
+    }
+
+    for (unsigned int i = 0; i < m_objects_to_update_graphics.size(); i++)
+    {
+        m_objects_to_update_graphics[i]->updateGraphics(dt);
+        if (m_update_graphics_list_dirty)
+            return;
     }
 }   // updateGraphics
 
@@ -231,7 +246,7 @@ void TrackObjectManager::update(float dt)
 // ----------------------------------------------------------------------------
 void TrackObjectManager::resetAfterRewind()
 {
-    m_update_list_dirty = true;
+    markUpdateListDirty();
     TrackObject* curr;
     for_in (curr, m_all_objects)
     {
@@ -305,7 +320,7 @@ bool TrackObjectManager::castRay(const btVector3 &from,
 void TrackObjectManager::insertObject(TrackObject* object)
 {
     m_all_objects.push_back(object);
-    m_update_list_dirty = true;
+    markUpdateListDirty();
 }
 
 // ----------------------------------------------------------------------------
@@ -323,6 +338,6 @@ void TrackObjectManager::insertDriveableObject(TrackObject* object)
 void TrackObjectManager::removeObject(TrackObject* obj)
 {
     m_all_objects.remove(obj);
-    m_update_list_dirty = true;
+    markUpdateListDirty();
     delete obj;
 }   // removeObject

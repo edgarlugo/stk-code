@@ -544,6 +544,13 @@ bool TrackObject::needsUpdate() const
 }   // needsUpdate
 
 // ----------------------------------------------------------------------------
+bool TrackObject::needsUpdateGraphics() const
+{
+    return m_animator || (m_physical_object && m_physical_object->isDynamic()) ||
+        (m_presentation && m_presentation->needsUpdateGraphics());
+}   // needsUpdateGraphics
+
+// ----------------------------------------------------------------------------
 void TrackObject::update(float dt)
 {
     if (m_presentation) m_presentation->update(dt);
