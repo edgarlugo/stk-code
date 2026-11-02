@@ -95,6 +95,9 @@
 #include <ISceneManager.h>
 #include <IVideoDriver.h>
 #include <SMeshBuffer.h>
+#ifdef __vita__
+#include <ge_render_info.hpp>
+#endif
 
 #include <algorithm>
 #include <iostream>
@@ -1631,7 +1634,8 @@ void Track::freeCachedMeshVertexBuffer()
  *  its own scene nodes: Black Forest has ~3000 meshes under ~1500 LOD nodes,
  *  which is most of a frame on the Vita. The static objects of each area are
  *  merged into one mesh per material (objects with levels of detail into one
- *  LOD node per area), and their own nodes are hidden.
+ *  LOD node per area), and their own nodes are hidden. Colorizable objects
+ *  keep their random hue: they are merged into one mesh buffer per hue.
  */
 void Track::mergeStaticObjects()
 {
@@ -1692,7 +1696,13 @@ void Track::mergeStaticObjects()
             return false;
         for (u32 i = 0; i < mesh->getMeshBufferCount(); i++)
         {
-            const video::SMaterial& m = node->getMaterial(i);
+            video::SMaterial m = node->getMaterial(i);
+            const std::shared_ptr<GE::GERenderInfo>& ri = m.getRenderInfo();
+            if (ri && (ri->isTransparent() ||
+                ri->getVertexColor() != video::SColor(-1)))
+                return false;
+            m.setRenderInfo(
+                mesh->getMeshBuffer(i)->getMaterial().getRenderInfo());
             if (m != mesh->getMeshBuffer(i)->getMaterial())
                 return false;
             if (m.isTransparent() &&
@@ -1794,6 +1804,7 @@ void Track::mergeStaticObjects()
     };
     // The meshes of the nodes in one mesh, around the center of their area
     int merged_vertices = 0, merged_bytes = 0;
+    std::map<float, std::shared_ptr<GE::GERenderInfo> > hues;
     auto merge = [&](const std::vector<scene::ISceneNode*>& nodes,
                      const core::vector3df& center)
     {
@@ -1802,8 +1813,26 @@ void Track::mergeStaticObjects()
         to_cell.setTranslation(-center);
         for (scene::ISceneNode* node : nodes)
         {
-            mesh->addMesh(((scene::IMeshSceneNode*)node)->getMesh(),
-                          to_cell * node->getAbsoluteTransformation());
+            // The materials of a colorizable object have its render info:
+            // for a moment its mesh buffers get the one shared by its hue
+            scene::IMesh* m = ((scene::IMeshSceneNode*)node)->getMesh();
+            std::vector<std::shared_ptr<GE::GERenderInfo> > own;
+            for (u32 i = 0; i < m->getMeshBufferCount(); i++)
+            {
+                video::SMaterial& mbm = m->getMeshBuffer(i)->getMaterial();
+                own.push_back(mbm.getRenderInfo());
+                const std::shared_ptr<GE::GERenderInfo>& ri =
+                    node->getMaterial(i).getRenderInfo();
+                if (!ri)
+                    continue;
+                std::shared_ptr<GE::GERenderInfo>& hue = hues[ri->getHue()];
+                if (!hue)
+                    hue = std::make_shared<GE::GERenderInfo>(ri->getHue());
+                mbm.setRenderInfo(hue);
+            }
+            mesh->addMesh(m, to_cell * node->getAbsoluteTransformation());
+            for (u32 i = 0; i < m->getMeshBufferCount(); i++)
+                m->getMeshBuffer(i)->getMaterial().setRenderInfo(own[i]);
         }
         mesh->finalize();
         for (u32 i = 0; i < mesh->getMeshBufferCount(); i++)
@@ -1824,7 +1853,8 @@ void Track::mergeStaticObjects()
             nodes.push_back(levels[0].first);
         const core::vector3df center = cell_center(cell.first);
         scene::IMesh* mesh = merge(nodes, center);
-        scene::ISceneNode* node = irr_driver->addMesh(mesh, "merged");
+        // IrrDriver::addMesh would drop the render info of the materials
+        scene::ISceneNode* node = sm->addMeshSceneNode(mesh);
         mesh->drop();
         node->setPosition(center);
         m_merged_nodes.push_back(node);
@@ -1852,7 +1882,7 @@ void Track::mergeStaticObjects()
                 distance = std::max(distance, levels[n].second);
             }
             scene::IMesh* mesh = merge(nodes, center);
-            scene::ISceneNode* node = irr_driver->addMesh(mesh, "merged");
+            scene::ISceneNode* node = sm->addMeshSceneNode(mesh);
             mesh->drop();
             lod->add(0, node, true);
             detail.push_back(distance);
