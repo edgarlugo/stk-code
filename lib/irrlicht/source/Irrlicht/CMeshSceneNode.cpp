@@ -7,6 +7,7 @@
 #include "ISceneManager.h"
 #include "S3DVertex.h"
 #include "ICameraSceneNode.h"
+#include "SViewFrustum.h"
 #include "IMeshCache.h"
 #include "IAnimatedMesh.h"
 #include "IMaterialRenderer.h"
@@ -19,6 +20,26 @@ namespace irr
 namespace scene
 {
 
+#ifdef __vita__
+//! The box, moved by the transformation, is outside one of the planes of the frustum
+static bool outsideFrustum(const SViewFrustum* frustum, const core::matrix4& transform,
+	const core::aabbox3df& box)
+{
+	core::aabbox3df tbox = box;
+	transform.transformBoxEx(tbox);
+	const core::vector3df center = tbox.getCenter();
+	const core::vector3df half = tbox.getExtent() * 0.5f;
+	for (s32 i = 0; i < SViewFrustum::VF_PLANE_COUNT; ++i)
+	{
+		const core::plane3df& p = frustum->planes[i];
+		const f32 radius = fabsf(p.Normal.X) * half.X + fabsf(p.Normal.Y) * half.Y +
+			fabsf(p.Normal.Z) * half.Z;
+		if (p.Normal.dotProduct(center) + p.D > radius)
+			return true;
+	}
+	return false;
+}
+#endif
 
 
 //! constructor
@@ -150,6 +171,14 @@ void CMeshSceneNode::render()
 	// render original meshes
 	if (renderMeshes)
 	{
+#ifdef __vita__
+		// The buffers of a mesh with several materials can be far apart (the
+		// track, its merged objects): the ones out of view are not drawn
+		const SViewFrustum* frustum = NULL;
+		if (Mesh->getMeshBufferCount() > 1 && AutomaticCullingState != EAC_OFF &&
+			SceneManager->getActiveCamera())
+			frustum = SceneManager->getActiveCamera()->getViewFrustum();
+#endif
 		for (u32 i=0; i<Mesh->getMeshBufferCount(); ++i)
 		{
 			scene::IMeshBuffer* mb = Mesh->getMeshBuffer(i);
@@ -164,6 +193,10 @@ void CMeshSceneNode::render()
 				// and solid only in solid pass
 				if (transparent == isTransparentPass)
 				{
+#ifdef __vita__
+					if (frustum && outsideFrustum(frustum, AbsoluteTransformation, mb->getBoundingBox()))
+						continue;
+#endif
 					driver->setMaterial(material);
 					driver->drawMeshBuffer(mb);
 				}
