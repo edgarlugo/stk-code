@@ -583,6 +583,13 @@ void	btQuantizedBvh::walkStacklessQuantizedTreeAgainstRay(btNodeOverlapCallback*
 	quantizeWithClamp(quantizedQueryAabbMin,rayAabbMin,0);
 	quantizeWithClamp(quantizedQueryAabbMax,rayAabbMax,1);
 
+	// A short ray, or one along an axis, is about as thin as its box: then the
+	// quantized box test alone chooses the nodes, without unquantizing their
+	// boxes for the ray test. The triangles are tested against the ray anyway.
+	const btVector3 rayAabbExtent = rayAabbMax - rayAabbMin;
+	const bool rayFitsItsBox = (rayAabbExtent.getX() > btScalar(1.0)) +
+		(rayAabbExtent.getY() > btScalar(1.0)) + (rayAabbExtent.getZ() > btScalar(1.0)) <= 1;
+
 	while (curIndex < endNodeIndex)
 	{
 
@@ -612,7 +619,11 @@ void	btQuantizedBvh::walkStacklessQuantizedTreeAgainstRay(btNodeOverlapCallback*
 		rayBoxOverlap = 0;
 		boxBoxOverlap = testQuantizedAabbAgainstQuantizedAabb(quantizedQueryAabbMin,quantizedQueryAabbMax,rootNode->m_quantizedAabbMin,rootNode->m_quantizedAabbMax);
 		isLeafNode = rootNode->isLeafNode();
-		if (boxBoxOverlap)
+		if (boxBoxOverlap && rayFitsItsBox)
+		{
+			rayBoxOverlap = 1;
+		}
+		else if (boxBoxOverlap)
 		{
 			btVector3 bounds[2];
 			bounds[0] = unQuantize(rootNode->m_quantizedAabbMin);
