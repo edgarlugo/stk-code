@@ -39,6 +39,10 @@ public:
 protected:
 	int yy;
 	COGLES2MaterialRenderer* SharedRenderer;
+
+	// Uniform indices, looked up once instead of by name on every draw
+	s32 HueChangeID, VertexColorID, MaterialTypeID, WorldMatrixID, MvpMatrixID,
+		TextureUsage0ID, TextureTrans0ID, TextureUnit0ID;
 };
 
 

@@ -39,6 +39,15 @@ COGLES2FixedPipelineRenderer::COGLES2FixedPipelineRenderer(const c8* vertexShade
 		SharedRenderer->grab();
 	else
 		init(Temp, vertexShaderProgram, pixelShaderProgram, false);
+
+	HueChangeID = getPixelShaderConstantID("uHueChange");
+	VertexColorID = getPixelShaderConstantID("uVertexColor");
+	MaterialTypeID = getPixelShaderConstantID("uMaterialType");
+	WorldMatrixID = getPixelShaderConstantID("uWorldMatrix");
+	MvpMatrixID = getPixelShaderConstantID("uMvpMatrix");
+	TextureUsage0ID = getPixelShaderConstantID("uTextureUsage0");
+	TextureTrans0ID = getVertexShaderConstantID("uTextureTrans0");
+	TextureUnit0ID = getPixelShaderConstantID("uTextureUnit0");
 }
 
 
@@ -148,33 +157,33 @@ bool COGLES2FixedPipelineRenderer::OnRender(IMaterialRendererServices* service, 
 			hue_change = Driver->getCurrentMaterial().getRenderInfo()->getHue();
 			vertex_color = video::SColorf(Driver->getCurrentMaterial().getRenderInfo()->getVertexColor());
 		}
-		IMaterialRendererServices::setPixelShaderConstant("uHueChange", &hue_change, 1);
-		IMaterialRendererServices::setPixelShaderConstant("uVertexColor", &vertex_color.r, 4);
+		setPixelShaderConstant(HueChangeID, &hue_change, 1);
+		setPixelShaderConstant(VertexColorID, &vertex_color.r, 4);
 
-		IMaterialRendererServices::setPixelShaderConstant("uMaterialType", &materialType, 1);
+		setPixelShaderConstant(MaterialTypeID, &materialType, 1);
 
 		/* Transform Matrices Upload */
 
 		core::matrix4 world = Driver->getTransform(ETS_WORLD);
-		IMaterialRendererServices::setPixelShaderConstant("uWorldMatrix", world.pointer(), 16);
+		setPixelShaderConstant(WorldMatrixID, world.pointer(), 16);
 
 		core::matrix4 worldViewProj = Driver->getTransform(video::ETS_PROJECTION);
 		worldViewProj *= Driver->getTransform(video::ETS_VIEW);
 		worldViewProj *= Driver->getTransform(ETS_WORLD);
-		IMaterialRendererServices::setPixelShaderConstant("uMvpMatrix", worldViewProj.pointer(), 16);
+		setPixelShaderConstant(MvpMatrixID, worldViewProj.pointer(), 16);
 
 		/* Textures Upload */
 
 		s32 TextureUsage0 = Driver->isActiveTexture(0);
 		//s32 TextureUsage1 = Driver->isActiveTexture(1);
 
-		IMaterialRendererServices::setPixelShaderConstant("uTextureUsage0", &TextureUsage0, 1);
+		setPixelShaderConstant(TextureUsage0ID, &TextureUsage0, 1);
 		//IMaterialRendererServices::setPixelShaderConstant("uTextureUsage1", &TextureUsage1, 1);
 
 		const irr::core::matrix4& textureMatrix0 = Driver->getCurrentMaterial().getTextureMatrix(0);
 		//core::matrix4 textureMatrix1 = Driver->getTransform(video::ETS_TEXTURE_0);
 
-		IMaterialRendererServices::setVertexShaderConstant("uTextureTrans0", &textureMatrix0[8], 2);
+		setVertexShaderConstant(TextureTrans0ID, &textureMatrix0[8], 2);
 		//IMaterialRendererServices::setPixelShaderConstant("uTextureMatrix1", textureMatrix1.pointer(), 16);
 
 		s32 TextureUnit0 = 0;
@@ -183,7 +192,7 @@ bool COGLES2FixedPipelineRenderer::OnRender(IMaterialRendererServices* service, 
 		if (second_texture)
 			TextureUnit0 = 1;
 
-		IMaterialRendererServices::setPixelShaderConstant("uTextureUnit0", &TextureUnit0, 1);
+		setPixelShaderConstant(TextureUnit0ID, &TextureUnit0, 1);
 		//IMaterialRendererServices::setPixelShaderConstant("uTextureUnit1", &TextureUnit1, 1);
 
 		return true;
