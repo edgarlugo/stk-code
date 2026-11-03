@@ -1639,7 +1639,11 @@ void Track::freeCachedMeshVertexBuffer()
  */
 void Track::mergeStaticObjects()
 {
+    // The distances of the levels of detail are measured from the center of
+    // the area, so these areas stay small next to them; the GPU draws the
+    // larger areas of the other objects for less than their draws would cost
     const float cell_size = 40.0f;
+    const float mesh_cell_size = 400.0f;
     scene::ISceneManager* sm = irr_driver->getSceneManager();
 
     // Objects a script may hide or move are left alone: the track script
@@ -1788,19 +1792,20 @@ void Track::mergeStaticObjects()
             continue;
 
         const core::vector3df pos = p->getNode()->getAbsolutePosition();
+        const float size = levels[0].second < 0 ? mesh_cell_size : cell_size;
         const uint64_t key =
-            (uint64_t)(u16)(s16)floorf(pos.X / cell_size) << 32 |
-            (uint64_t)(u16)(s16)floorf(pos.Y / cell_size) << 16 |
-            (uint64_t)(u16)(s16)floorf(pos.Z / cell_size);
+            (uint64_t)(u16)(s16)floorf(pos.X / size) << 32 |
+            (uint64_t)(u16)(s16)floorf(pos.Y / size) << 16 |
+            (uint64_t)(u16)(s16)floorf(pos.Z / size);
         (levels[0].second < 0 ? mesh_cells : lod_cells)[key].push_back(levels);
         merged.push_back(p);
     }
 
-    auto cell_center = [cell_size](uint64_t key)
+    auto cell_center = [](uint64_t key, float size)
     {
         return core::vector3df((s16)(u16)(key >> 32) + 0.5f,
                                (s16)(u16)(key >> 16) + 0.5f,
-                               (s16)(u16)key + 0.5f) * cell_size;
+                               (s16)(u16)key + 0.5f) * size;
     };
     // The meshes of the nodes in one mesh, around the center of their area
     int merged_vertices = 0, merged_bytes = 0;
@@ -1851,7 +1856,7 @@ void Track::mergeStaticObjects()
         std::vector<scene::ISceneNode*> nodes;
         for (const Levels& levels : cell.second)
             nodes.push_back(levels[0].first);
-        const core::vector3df center = cell_center(cell.first);
+        const core::vector3df center = cell_center(cell.first, mesh_cell_size);
         scene::IMesh* mesh = merge(nodes, center);
         // IrrDriver::addMesh would drop the render info of the materials
         scene::ISceneNode* node = sm->addMeshSceneNode(mesh);
@@ -1866,7 +1871,7 @@ void Track::mergeStaticObjects()
         unsigned num_levels = 0;
         for (const Levels& levels : cell.second)
             num_levels = std::max(num_levels, (unsigned)levels.size());
-        const core::vector3df center = cell_center(cell.first);
+        const core::vector3df center = cell_center(cell.first, cell_size);
         LODNode* lod = new LODNode("merged", sm->getRootSceneNode(), sm);
         lod->setPosition(center);
         std::vector<int> detail;
