@@ -56,6 +56,7 @@ ThreeDAnimation::ThreeDAnimation(const XMLNode &node, TrackObject* object) : Ani
     setInitialTransform(object->getInitXYZ(),
                         object->getInitRotation() );
     m_hpr = object->getInitRotation();
+    m_rotation_valid = false;
 
     assert(!std::isnan(m_hpr.getX()));
     assert(!std::isnan(m_hpr.getY()));
@@ -99,19 +100,26 @@ void ThreeDAnimation::updateWithWorldTicks(bool has_physics)
     // in blender. So in order to reproduce the blender IPO rotations
     // correctly, we have to get the rotations around each axis and combine
     // them in the right order for irrlicht
-    core::matrix4 m;
-    m.makeIdentity();
-    core::matrix4 mx;
-    assert(!std::isnan(m_hpr.getX()));
-    assert(!std::isnan(m_hpr.getY()));
-    assert(!std::isnan(m_hpr.getZ()));
-    mx.setRotationDegrees(core::vector3df(m_hpr.getX(), 0, 0));
-    core::matrix4 my;
-    my.setRotationDegrees(core::vector3df(0, m_hpr.getY(), 0));
-    core::matrix4 mz;
-    mz.setRotationDegrees(core::vector3df(0, 0, m_hpr.getZ()));
-    m = my*mz*mx;
-    core::vector3df hpr = m.getRotationDegrees();
+    if (!m_rotation_valid || m_hpr.getX() != m_last_hpr.getX() ||
+        m_hpr.getY() != m_last_hpr.getY() || m_hpr.getZ() != m_last_hpr.getZ())
+    {
+        core::matrix4 m;
+        m.makeIdentity();
+        core::matrix4 mx;
+        assert(!std::isnan(m_hpr.getX()));
+        assert(!std::isnan(m_hpr.getY()));
+        assert(!std::isnan(m_hpr.getZ()));
+        mx.setRotationDegrees(core::vector3df(m_hpr.getX(), 0, 0));
+        core::matrix4 my;
+        my.setRotationDegrees(core::vector3df(0, m_hpr.getY(), 0));
+        core::matrix4 mz;
+        mz.setRotationDegrees(core::vector3df(0, 0, m_hpr.getZ()));
+        m = my*mz*mx;
+        m_last_rotation = m.getRotationDegrees();
+        m_last_hpr = m_hpr;
+        m_rotation_valid = true;
+    }
+    const core::vector3df& hpr = m_last_rotation;
     //m_node->setRotation(hpr);
 
     if (m_object)

@@ -142,6 +142,10 @@ private:
      * world transform. */
     btTransform           m_current_transform;
 
+    /** The transform the graphical node was last moved to. */
+    btTransform           m_graphics_transform;
+    bool                  m_graphics_valid;
+
     /** The mesh might not have the same center as bullet does. This
      *  offset is used to offset the location of the graphical mesh
      *  so that the graphics are aligned with the bullet collision shape. */

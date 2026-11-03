@@ -154,6 +154,7 @@ PhysicalObject::PhysicalObject(bool is_dynamic,
     m_explode_kart       = false;
     m_flatten_kart       = false;
     m_triangle_mesh      = NULL;
+    m_graphics_valid     = false;
 
     m_object             = object;
     m_init_xyz           = object->getAbsoluteCenterPosition();
@@ -632,6 +633,13 @@ void PhysicalObject::updateGraphics(float dt)
     if (!m_is_dynamic)
         return;
 
+    // Objects at rest don't need their node moved again (most of them are)
+    if (!SmoothNetworkBody::isEnabled() && m_graphics_valid &&
+        m_body->getWorldTransform() == m_graphics_transform)
+        return;
+    m_graphics_transform = m_body->getWorldTransform();
+    m_graphics_valid = true;
+
     SmoothNetworkBody::updateSmoothedGraphics(m_body->getWorldTransform(),
         m_body->getLinearVelocity(), dt);
     Vec3 xyz = SmoothNetworkBody::getSmoothedTrans().getOrigin();
@@ -715,6 +723,7 @@ void PhysicalObject::reset()
 
     m_last_transform = m_init_pos;
     m_last_lv = m_last_av = Vec3(0.0f);
+    m_graphics_valid = false;
 }   // reset
 
 // ----------------------------------------------------------------------------

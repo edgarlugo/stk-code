@@ -63,6 +63,12 @@ private:
      *  can not use the value returned by getRotation from a scene node. */
     Vec3                  m_hpr;
 
+    /** m_hpr of the last update and the irrlicht rotation computed from it:
+     *  most animations don't rotate, and the conversion is costly. */
+    Vec3                  m_last_hpr;
+    core::vector3df       m_last_rotation;
+    bool                  m_rotation_valid;
+
     /**
       * If true, play animation even when GFX are disabled
       */
