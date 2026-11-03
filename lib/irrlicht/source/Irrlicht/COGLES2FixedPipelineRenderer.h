@@ -26,7 +26,7 @@ public:
 	//! Constructor
 	COGLES2FixedPipelineRenderer(const c8* vertexShaderProgram,
 		const c8* pixelShaderProgram, E_MATERIAL_TYPE baseMaterial,
-		COGLES2Driver* driver);
+		COGLES2Driver* driver, bool variant = false);
 
 	//! Destructor
 	~COGLES2FixedPipelineRenderer();
@@ -43,6 +43,15 @@ protected:
 	// Uniform indices, looked up once instead of by name on every draw
 	s32 HueChangeID, VertexColorID, MaterialTypeID, WorldMatrixID, MvpMatrixID,
 		TextureUsage0ID, TextureTrans0ID, TextureUnit0ID;
+
+#ifdef __vita__
+	// The Vita's GPU pays for every branch of the fragment shader on uniforms:
+	// one program per texture use and hue change, with the material type built in
+	COGLES2FixedPipelineRenderer* getVariant(const SMaterial& material);
+
+	core::stringc VertexShader, PixelShader;
+	COGLES2FixedPipelineRenderer* Variants[4];
+#endif
 };
 
 

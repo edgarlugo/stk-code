@@ -24,7 +24,7 @@ namespace video
 //! Constructor
 COGLES2FixedPipelineRenderer::COGLES2FixedPipelineRenderer(const c8* vertexShaderProgram,
 							const c8* pixelShaderProgram, E_MATERIAL_TYPE baseMaterial,
-							COGLES2Driver* driver)
+							COGLES2Driver* driver, bool variant)
 	: COGLES2MaterialRenderer(driver, 0, baseMaterial)
 {
 	#ifdef _DEBUG
@@ -33,12 +33,26 @@ COGLES2FixedPipelineRenderer::COGLES2FixedPipelineRenderer(const c8* vertexShade
 	yy = (int)baseMaterial;
 	int Temp = 0;
 
+#ifdef __vita__
+	// The variants are built when first used
+	SharedRenderer = 0;
+	for (int i = 0; i < 4; i++)
+		Variants[i] = 0;
+	if (variant)
+		init(Temp, vertexShaderProgram, pixelShaderProgram, false);
+	else
+	{
+		VertexShader = vertexShaderProgram;
+		PixelShader = pixelShaderProgram;
+	}
+#else
 	SharedRenderer = reinterpret_cast<COGLES2MaterialRenderer*>(driver->getMaterialRenderer(EMT_SOLID));
 
 	if (SharedRenderer)
 		SharedRenderer->grab();
 	else
 		init(Temp, vertexShaderProgram, pixelShaderProgram, false);
+#endif
 
 	HueChangeID = getPixelShaderConstantID("uHueChange");
 	VertexColorID = getPixelShaderConstantID("uVertexColor");
@@ -56,7 +70,77 @@ COGLES2FixedPipelineRenderer::~COGLES2FixedPipelineRenderer()
 {
 	if(SharedRenderer)
 		SharedRenderer->drop();
+#ifdef __vita__
+	for (int i = 0; i < 4; i++)
+	{
+		if (Variants[i])
+			Variants[i]->drop();
+	}
+#endif
 }
+
+
+static s32 getMaterialTypeNr(E_MATERIAL_TYPE type, bool& second_texture)
+{
+	second_texture = false;
+	switch(type)
+	{
+	case EMT_SOLID_2_LAYER:
+		return 1;
+	case EMT_LIGHTMAP:
+	case EMT_LIGHTMAP_ADD:
+	case EMT_LIGHTMAP_M2:
+	case EMT_LIGHTMAP_M4:
+		return 2;
+	case EMT_LIGHTMAP_LIGHTING:
+	case EMT_LIGHTMAP_LIGHTING_M2:
+	case EMT_LIGHTMAP_LIGHTING_M4:
+		second_texture = true;
+		return 2;
+	case EMT_DETAIL_MAP:
+		return 3;
+	case EMT_SPHERE_MAP:
+		return 4;
+	case EMT_REFLECTION_2_LAYER:
+		return 5;
+	case EMT_TRANSPARENT_ALPHA_CHANNEL:
+		return 6;
+	case EMT_TRANSPARENT_ALPHA_CHANNEL_REF:
+		return 7;
+	case EMT_TRANSPARENT_VERTEX_ALPHA:
+		return 8;
+	case EMT_TRANSPARENT_REFLECTION_2_LAYER:
+		return 9;
+	case EMT_STK_GRASS:
+		return 10;
+	case EMT_ONETEXTURE_BLEND:
+		return 11;
+	default:
+		return 0;
+	}
+}
+
+
+#ifdef __vita__
+COGLES2FixedPipelineRenderer* COGLES2FixedPipelineRenderer::getVariant(const SMaterial& material)
+{
+	const bool texture = material.getTexture(0) != 0;
+	const bool hue = material.getRenderInfo() && material.getRenderInfo()->getHue() > 0.0f;
+	COGLES2FixedPipelineRenderer*& variant = Variants[hue * 2 + texture];
+	if (!variant)
+	{
+		bool second_texture;
+		core::stringc pixel_shader = "#define MATERIAL_TYPE ";
+		pixel_shader += core::stringc(getMaterialTypeNr((E_MATERIAL_TYPE)yy, second_texture));
+		pixel_shader += texture ? "\n#define TEXTURE_USAGE true\n" : "\n#define TEXTURE_USAGE false\n";
+		pixel_shader += hue ? "#define HUE_CHANGE true\n" : "#define HUE_CHANGE false\n";
+		pixel_shader += PixelShader;
+		variant = new COGLES2FixedPipelineRenderer(VertexShader.c_str(), pixel_shader.c_str(),
+			(E_MATERIAL_TYPE)yy, Driver, true);
+	}
+	return variant;
+}
+#endif
 
 
 void COGLES2FixedPipelineRenderer::OnSetMaterial(const video::SMaterial& material,
@@ -66,6 +150,10 @@ void COGLES2FixedPipelineRenderer::OnSetMaterial(const video::SMaterial& materia
 {
 	if (SharedRenderer)
 		Driver->getBridgeCalls()->setProgram(SharedRenderer->getProgram());
+#ifdef __vita__
+	else if (VertexShader.size())
+		Driver->getBridgeCalls()->setProgram(getVariant(material)->getProgram());
+#endif
 	else
 		Driver->getBridgeCalls()->setProgram(Program);
 
@@ -95,60 +183,16 @@ bool COGLES2FixedPipelineRenderer::OnRender(IMaterialRendererServices* service, 
 {
 	if (SharedRenderer)
 		return SharedRenderer->OnRender(service, vtxtype);
+#ifdef __vita__
+	else if (VertexShader.size())
+		return getVariant(Driver->getCurrentMaterial())->OnRender(service, vtxtype);
+#endif
 	else
 	{
 		Driver->setTextureRenderStates(Driver->getCurrentMaterial(), false);
 
-		s32 materialType = 0;
-		bool second_texture = false;
-
-		switch(Driver->getCurrentMaterial().MaterialType)
-		{
-		case EMT_SOLID_2_LAYER:
-			materialType = 1;
-			break;
-		case EMT_LIGHTMAP:
-		case EMT_LIGHTMAP_ADD:
-		case EMT_LIGHTMAP_M2:
-		case EMT_LIGHTMAP_M4:
-			materialType = 2;
-			break;
-		case EMT_LIGHTMAP_LIGHTING:
-		case EMT_LIGHTMAP_LIGHTING_M2:
-		case EMT_LIGHTMAP_LIGHTING_M4:
-			materialType = 2;
-			second_texture = true;
-			break;
-		case EMT_DETAIL_MAP:
-			materialType = 3;
-			break;
-		case EMT_SPHERE_MAP:
-			materialType = 4;
-			break;
-		case EMT_REFLECTION_2_LAYER:
-			materialType = 5;
-			break;
-		case EMT_TRANSPARENT_ALPHA_CHANNEL:
-			materialType = 6;
-			break;
-		case EMT_TRANSPARENT_ALPHA_CHANNEL_REF:
-			materialType = 7;
-			break;
-		case EMT_TRANSPARENT_VERTEX_ALPHA:
-			materialType = 8;
-			break;
-		case EMT_TRANSPARENT_REFLECTION_2_LAYER:
-			materialType = 9;
-			break;
-		case EMT_STK_GRASS:
-			materialType = 10;
-			break;
-		case EMT_ONETEXTURE_BLEND:
-			materialType = 11;
-			break;
-		default:
-			break;
-		}
+		bool second_texture;
+		s32 materialType = getMaterialTypeNr(Driver->getCurrentMaterial().MaterialType, second_texture);
 
 		video::SColorf vertex_color(SColor(-1));
 		float hue_change = 0.0f;

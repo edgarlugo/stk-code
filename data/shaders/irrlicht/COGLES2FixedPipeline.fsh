@@ -17,12 +17,18 @@ precision mediump float;
 
 /* Uniforms */
 
-uniform int uMaterialType;
-
 uniform float uHueChange;
 uniform vec4 uVertexColor;
 
+#ifdef MATERIAL_TYPE
+// One program per material type, texture use and hue change (Vita)
+#define uMaterialType MATERIAL_TYPE
+#define uTextureUsage0 TEXTURE_USAGE
+#else
+uniform int uMaterialType;
 uniform bool uTextureUsage0;
+#define HUE_CHANGE (uHueChange > 0.0)
+#endif
 //uniform bool uTextureUsage1;
 
 uniform sampler2D uTextureUnit0;
@@ -59,7 +65,7 @@ vec4 renderSolid()
 	if(uTextureUsage0)
 	{
 		Color *= texture2D(uTextureUnit0, varTexCoord0);
-		if (uHueChange > 0.0)
+		if (HUE_CHANGE)
 		{
 			float f_hue_change = 0.66;
 			float mask = Color.a;
@@ -138,7 +144,7 @@ vec4 renderTransparent()
 	if(uTextureUsage0)
 	{
 		Color *= texture2D(uTextureUnit0, varTexCoord0);
-		if (uHueChange > 0.0)
+		if (HUE_CHANGE)
 		{
 			vec3 old_hsv = rgbToHsv(Color.rgb);
 			vec2 new_xy = vec2(uHueChange, old_hsv.y);
@@ -156,7 +162,7 @@ vec4 renderTransparentVertexColor()
 	if(uTextureUsage0)
 	{
 		Color *= texture2D(uTextureUnit0, varTexCoord0);
-		if (uHueChange > 0.0)
+		if (HUE_CHANGE)
 		{
 			vec3 old_hsv = rgbToHsv(Color.rgb);
 			vec2 new_xy = vec2(uHueChange, old_hsv.y);
