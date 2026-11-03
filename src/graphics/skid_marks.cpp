@@ -128,6 +128,14 @@ void SkidMarks::update(float dt, bool force_skid_marks,
         it++;
     }
 
+    // The raycasts below are only needed to make skid marks
+    const Skidding *skid = m_kart.getSkidding();
+    if (!m_skid_marking && !force_skid_marks &&
+        ((skid->getSkidState() != Skidding::SKID_ACCUMULATE_LEFT &&
+          skid->getSkidState() != Skidding::SKID_ACCUMULATE_RIGHT) ||
+         skid->isJumping()))
+        return;
+
     // Get raycast information
     // -----------------------
     btKart *vehicle = m_kart.getVehicle();
@@ -156,7 +164,6 @@ void SkidMarks::update(float dt, bool force_skid_marks,
     //   the physics force both wheels on one axis to touch the ground or not.
     //   If only one wheel touches the ground, the 2nd one gets the same
     //   raycast result --> delta is 0, which is considered to be not skidding.
-    const Skidding *skid = m_kart.getSkidding();
     bool is_skidding = vehicle->visualWheelsTouchGround() &&
                ( force_skid_marks ||
                  (    (skid->getSkidState()==Skidding::SKID_ACCUMULATE_LEFT||
