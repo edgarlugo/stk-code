@@ -96,6 +96,7 @@
 #include <IVideoDriver.h>
 #include <SMeshBuffer.h>
 #ifdef __vita__
+#include <SMesh.h>
 #include <ge_render_info.hpp>
 #endif
 
@@ -369,6 +370,9 @@ void Track::cleanup()
     for (unsigned int i = 0; i < m_merged_nodes.size(); i++)
         irr_driver->removeNode(m_merged_nodes[i]);
     m_merged_nodes.clear();
+    for (unsigned int i = 0; i < m_merged_atlases.size(); i++)
+        m_merged_atlases[i]->drop();
+    m_merged_atlases.clear();
 
     for (unsigned int i = 0; i < m_static_physics_only_nodes.size(); i++)
     {
@@ -1630,6 +1634,272 @@ void Track::freeCachedMeshVertexBuffer()
 
 #ifdef __vita__
 // ----------------------------------------------------------------------------
+/** Each mesh buffer of a merged area is a draw call. Buffers whose materials
+ *  only differ by a small texture, inside which their texture coordinates
+ *  stay, are drawn from one atlas per material instead: one buffer per area
+ *  and atlas. Tiles keep power-of-two sizes at multiples of their size, so a
+ *  mipmap level never mixes two of them, and their coordinates are moved half
+ *  a texel inside, so bilinear filtering never reads a neighbor. Returns the
+ *  atlases (the meshes don't grab their textures).
+ */
+static std::vector<video::ITexture*> useTextureAtlases(
+                                     std::vector<scene::IMesh**>& meshes)
+{
+    const u32 max_tile = 256, max_page = 1024;
+    std::vector<video::SMaterial> materials; // without their texture
+    struct Tile
+    {
+        u32 material;
+        video::ITexture* texture;
+        u32 page, x, y;
+        bool ok;
+    };
+    std::vector<Tile> tiles;
+    std::map<std::pair<u32, video::ITexture*>, u32> tile_of;
+
+    // The tile of a buffer that can use an atlas, or -1
+    auto findTile = [&](scene::IMeshBuffer* mb, bool add) -> int
+    {
+        const video::SMaterial& m = mb->getMaterial();
+        video::ITexture* t = m.getTexture(0);
+        // The colorization mask of a colorizable solid material is written in
+        // the alpha channel of its texture, not in the image file
+        if (mb->getVertexType() != video::EVT_STANDARD ||
+            mb->getIndexType() != video::EIT_16BIT ||
+            mb->getPrimitiveType() != scene::EPT_TRIANGLES || !t ||
+            m.getTexture(1) || !m.getTextureMatrix(0).isIdentity() ||
+            (m.MaterialType == video::EMT_SOLID &&
+             (m.isColorizable() || m.getRenderInfo())) ||
+            (m.MaterialType != video::EMT_SOLID &&
+             m.MaterialType != video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF &&
+             m.MaterialType != video::EMT_STK_GRASS))
+            return -1;
+        const core::dimension2du& size = t->getSize();
+        if (size.Width > max_tile || size.Height > max_tile ||
+            (size.Width & (size.Width - 1)) || (size.Height & (size.Height - 1)))
+            return -1;
+        const video::S3DVertex* v = (const video::S3DVertex*)mb->getVertices();
+        for (u32 i = 0; i < mb->getVertexCount(); i++)
+        {
+            if (v[i].TCoords.X < -0.001f || v[i].TCoords.X > 1.001f ||
+                v[i].TCoords.Y < -0.001f || v[i].TCoords.Y > 1.001f)
+                return -1;
+        }
+        video::SMaterial key = m;
+        key.setTexture(0, NULL);
+        u32 material = 0;
+        while (material < materials.size() && materials[material] != key)
+            material++;
+        if (material == materials.size())
+        {
+            if (!add)
+                return -1;
+            materials.push_back(key);
+        }
+        auto it = tile_of.find(std::make_pair(material, t));
+        if (it != tile_of.end())
+            return it->second;
+        if (!add)
+            return -1;
+        tiles.push_back(Tile{ material, t, 0, 0, 0, false });
+        tile_of[std::make_pair(material, t)] = tiles.size() - 1;
+        return tiles.size() - 1;
+    };
+    for (scene::IMesh** mesh : meshes)
+    {
+        for (u32 i = 0; i < (*mesh)->getMeshBufferCount(); i++)
+            findTile((*mesh)->getMeshBuffer(i), true);
+    }
+
+    // Pages of each material, filled row by row with the tallest tiles first
+    // and the widest first in a row: positions stay multiples of the sizes
+    std::vector<u32> order(tiles.size());
+    for (u32 i = 0; i < order.size(); i++)
+        order[i] = i;
+    std::sort(order.begin(), order.end(), [&](u32 a, u32 b)
+    {
+        const core::dimension2du& sa = tiles[a].texture->getSize();
+        const core::dimension2du& sb = tiles[b].texture->getSize();
+        if (tiles[a].material != tiles[b].material)
+            return tiles[a].material < tiles[b].material;
+        if (sa.Height != sb.Height)
+            return sa.Height > sb.Height;
+        return sa.Width > sb.Width;
+    });
+    struct Page
+    {
+        u32 material, width, height, tiles;
+        video::ITexture* atlas;
+    };
+    std::vector<Page> pages;
+    u32 x = 0, y = 0, row = 0;
+    for (u32 i : order)
+    {
+        Tile& tile = tiles[i];
+        const core::dimension2du& size = tile.texture->getSize();
+        if (pages.empty() || pages.back().material != tile.material)
+        {
+            pages.push_back(Page{ tile.material, 0, 0, 0, NULL });
+            x = y = row = 0;
+        }
+        if (x + size.Width > max_page)
+        {
+            x = 0;
+            y += row;
+            row = 0;
+        }
+        if (y + size.Height > max_page)
+        {
+            pages.push_back(Page{ tile.material, 0, 0, 0, NULL });
+            x = y = row = 0;
+        }
+        tile.page = pages.size() - 1;
+        tile.x = x;
+        tile.y = y;
+        x += size.Width;
+        row = std::max(row, size.Height);
+        Page& page = pages.back();
+        page.width = std::max(page.width, x);
+        page.height = std::max(page.height, y + size.Height);
+        page.tiles++;
+    }
+
+    // The atlases, from the image files of their textures
+    std::vector<video::ITexture*> atlases;
+    for (u32 p = 0; p < pages.size(); p++)
+    {
+        Page& page = pages[p];
+        if (page.tiles < 2)
+            continue;
+        core::dimension2du size(page.width, page.height);
+        size = size.getOptimalSize(true, false);
+        video::IImage* image = GE::getDriver()->createImage(video::ECF_A8R8G8B8,
+            size);
+        u8* dst = (u8*)image->lock();
+        memset(dst, 0, size.Width * size.Height * 4);
+        for (Tile& tile : tiles)
+        {
+            if (tile.page != p)
+                continue;
+            const core::dimension2du& ts = tile.texture->getSize();
+            const u8* src = (const u8*)tile.texture->lock(video::ETLM_READ_ONLY);
+            if (!src)
+                continue;
+            for (u32 row = 0; row < ts.Height; row++)
+            {
+                memcpy(dst + ((tile.y + row) * size.Width + tile.x) * 4,
+                       src + row * ts.Width * 4, ts.Width * 4);
+            }
+            tile.texture->unlock();
+            tile.ok = true;
+        }
+        image->unlock();
+        page.atlas = GE::createTexture(image,
+            StringUtils::insertValues("merged atlas %d", (int)p));
+        if (page.atlas->loadingFailed())
+        {
+            page.atlas->drop();
+            page.atlas = NULL;
+            for (Tile& tile : tiles)
+            {
+                if (tile.page == p)
+                    tile.ok = false;
+            }
+            continue;
+        }
+        page.width = size.Width;
+        page.height = size.Height;
+        atlases.push_back(page.atlas);
+    }
+
+    // In each mesh, the buffers of one atlas become one buffer (or more past
+    // 65536 vertices)
+    u32 before = 0, after = 0;
+    for (scene::IMesh** mesh : meshes)
+    {
+        std::map<u32, std::vector<scene::IMeshBuffer*> > by_page;
+        std::vector<scene::IMeshBuffer*> others;
+        for (u32 i = 0; i < (*mesh)->getMeshBufferCount(); i++)
+        {
+            scene::IMeshBuffer* mb = (*mesh)->getMeshBuffer(i);
+            const int t = findTile(mb, false);
+            if (t >= 0 && tiles[t].ok)
+                by_page[tiles[t].page].push_back(mb);
+            else
+                others.push_back(mb);
+        }
+        before += (*mesh)->getMeshBufferCount();
+        bool changed = false;
+        for (auto& it : by_page)
+            changed = changed || it.second.size() > 1;
+        if (!changed)
+        {
+            after += (*mesh)->getMeshBufferCount();
+            continue;
+        }
+        scene::SMesh* atlas_mesh = new scene::SMesh();
+        for (scene::IMeshBuffer* mb : others)
+            atlas_mesh->addMeshBuffer(mb);
+        for (auto& it : by_page)
+        {
+            if (it.second.size() == 1)
+            {
+                atlas_mesh->addMeshBuffer(it.second[0]);
+                continue;
+            }
+            const Page& page = pages[it.first];
+            scene::SMeshBuffer* out = NULL;
+            for (scene::IMeshBuffer* mb : it.second)
+            {
+                if (!out || out->Vertices.size() + mb->getVertexCount() > 65536)
+                {
+                    if (out)
+                    {
+                        out->recalculateBoundingBox();
+                        atlas_mesh->addMeshBuffer(out);
+                        out->drop();
+                    }
+                    out = new scene::SMeshBuffer();
+                    out->Material = materials[page.material];
+                    out->Material.setTexture(0, page.atlas);
+                    out->setHardwareMappingHint(
+                        mb->getHardwareMappingHint_Vertex(), scene::EBT_VERTEX);
+                    out->setHardwareMappingHint(
+                        mb->getHardwareMappingHint_Index(), scene::EBT_INDEX);
+                }
+                const Tile& tile = tiles[findTile(mb, false)];
+                const core::dimension2du& ts = tile.texture->getSize();
+                const u16 first = (u16)out->Vertices.size();
+                const video::S3DVertex* v =
+                    (const video::S3DVertex*)mb->getVertices();
+                for (u32 i = 0; i < mb->getVertexCount(); i++)
+                {
+                    video::S3DVertex vertex = v[i];
+                    vertex.TCoords.X = (tile.x + 0.5f + vertex.TCoords.X *
+                        (ts.Width - 1)) / page.width;
+                    vertex.TCoords.Y = (tile.y + 0.5f + vertex.TCoords.Y *
+                        (ts.Height - 1)) / page.height;
+                    out->Vertices.push_back(vertex);
+                }
+                const u16* index = mb->getIndices();
+                for (u32 i = 0; i < mb->getIndexCount(); i++)
+                    out->Indices.push_back(first + index[i]);
+            }
+            out->recalculateBoundingBox();
+            atlas_mesh->addMeshBuffer(out);
+            out->drop();
+        }
+        atlas_mesh->recalculateBoundingBox();
+        after += atlas_mesh->getMeshBufferCount();
+        (*mesh)->drop();
+        *mesh = atlas_mesh;
+    }
+    Log::info("Track", "Texture atlases: %d, merged mesh buffers %d -> %d.",
+              (int)atlases.size(), before, after);
+    return atlases;
+}   // useTextureAtlases
+
+// ----------------------------------------------------------------------------
 /** The fixed pipeline walks, culls and draws every object of a track through
  *  its own scene nodes: Black Forest has ~3000 meshes under ~1500 LOD nodes,
  *  which is most of a frame on the Vita. The static objects of each area are
@@ -1851,18 +2121,23 @@ void Track::mergeStaticObjects()
         return mesh;
     };
 
+    // The meshes of all areas come first: their texture atlases change them
+    struct Area
+    {
+        core::vector3df center;
+        std::vector<scene::IMesh*> meshes;
+        std::vector<int> detail;
+    };
+    std::vector<Area> areas;
     for (auto& cell : mesh_cells)
     {
         std::vector<scene::ISceneNode*> nodes;
         for (const Levels& levels : cell.second)
             nodes.push_back(levels[0].first);
-        const core::vector3df center = cell_center(cell.first, mesh_cell_size);
-        scene::IMesh* mesh = merge(nodes, center);
-        // IrrDriver::addMesh would drop the render info of the materials
-        scene::ISceneNode* node = sm->addMeshSceneNode(mesh);
-        mesh->drop();
-        node->setPosition(center);
-        m_merged_nodes.push_back(node);
+        Area area;
+        area.center = cell_center(cell.first, mesh_cell_size);
+        area.meshes.push_back(merge(nodes, area.center));
+        areas.push_back(area);
     }
     for (auto& cell : lod_cells)
     {
@@ -1871,14 +2146,12 @@ void Track::mergeStaticObjects()
         unsigned num_levels = 0;
         for (const Levels& levels : cell.second)
             num_levels = std::max(num_levels, (unsigned)levels.size());
-        const core::vector3df center = cell_center(cell.first, cell_size);
-        LODNode* lod = new LODNode("merged", sm->getRootSceneNode(), sm);
-        lod->setPosition(center);
-        std::vector<int> detail;
+        Area area;
+        area.center = cell_center(cell.first, cell_size);
         for (unsigned n = 0; n < num_levels; n++)
         {
             std::vector<scene::ISceneNode*> nodes;
-            int distance = detail.empty() ? 0 : detail.back();
+            int distance = area.detail.empty() ? 0 : area.detail.back();
             for (const Levels& levels : cell.second)
             {
                 if (n >= levels.size())
@@ -1886,13 +2159,38 @@ void Track::mergeStaticObjects()
                 nodes.push_back(levels[n].first);
                 distance = std::max(distance, levels[n].second);
             }
-            scene::IMesh* mesh = merge(nodes, center);
+            area.meshes.push_back(merge(nodes, area.center));
+            area.detail.push_back(distance);
+        }
+        areas.push_back(area);
+    }
+    std::vector<scene::IMesh**> all_meshes;
+    for (Area& area : areas)
+    {
+        for (scene::IMesh*& mesh : area.meshes)
+            all_meshes.push_back(&mesh);
+    }
+    m_merged_atlases = useTextureAtlases(all_meshes);
+    for (Area& area : areas)
+    {
+        if (area.detail.empty())
+        {
+            // IrrDriver::addMesh would drop the render info of the materials
+            scene::ISceneNode* node = sm->addMeshSceneNode(area.meshes[0]);
+            area.meshes[0]->drop();
+            node->setPosition(area.center);
+            m_merged_nodes.push_back(node);
+            continue;
+        }
+        LODNode* lod = new LODNode("merged", sm->getRootSceneNode(), sm);
+        lod->setPosition(area.center);
+        for (scene::IMesh* mesh : area.meshes)
+        {
             scene::ISceneNode* node = sm->addMeshSceneNode(mesh);
             mesh->drop();
             lod->add(0, node, true);
-            detail.push_back(distance);
         }
-        lod->setDetail(detail);
+        lod->setDetail(area.detail);
         m_merged_nodes.push_back(lod);
     }
     std::set<scene::ISceneNode*> hidden;

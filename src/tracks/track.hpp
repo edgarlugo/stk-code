@@ -163,6 +163,9 @@ private:
     /** Nodes drawing the static objects merged by mergeStaticObjects. */
     std::vector<scene::ISceneNode*> m_merged_nodes;
 
+    /** The texture atlases of these merged objects. */
+    std::vector<video::ITexture*> m_merged_atlases;
+
     /** The list of all nodes that are to be converted into physics,
      *  but not to be drawn (e.g. invisible walls). */
     std::vector<scene::ISceneNode*> m_static_physics_only_nodes;
