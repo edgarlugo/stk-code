@@ -68,7 +68,7 @@ protected:
 	
 	void	updateActivationState(btScalar timeStep);
 
-	void	updateActions(btScalar timeStep);
+	virtual void	updateActions(btScalar timeStep);
 
 	void	startProfiling(btScalar timeStep);
 

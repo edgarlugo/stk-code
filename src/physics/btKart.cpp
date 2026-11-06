@@ -33,7 +33,7 @@
 #define ROLLING_INFLUENCE_FIX
 
 // ============================================================================
-btKart::btKart(btRigidBody* chassis, btVehicleRaycaster* raycaster,
+btKart::btKart(btRigidBody* chassis, btKartRaycaster* raycaster,
                Kart *kart)
       : m_vehicleRaycaster(raycaster), m_fixed_body(0, 0, 0)
 {
@@ -249,18 +249,6 @@ btScalar btKart::rayCast(unsigned int index, float fraction)
 {
     btWheelInfo &wheel = m_wheelInfo[index];
 
-    // Work around a bullet problem: when using a convex hull the raycast
-    // would sometimes hit the chassis (which does not happen when using a
-    // box shape). Therefore set the collision mask in the chassis body so
-    // that it is not hit anymore.
-    short int old_group=0;
-    if(m_chassisBody->getBroadphaseHandle())
-    {
-        old_group = m_chassisBody->getBroadphaseHandle()
-                                 ->m_collisionFilterGroup;
-        m_chassisBody->getBroadphaseHandle()->m_collisionFilterGroup = 0;
-    }
-
     updateWheelTransformsWS(wheel, getChassisWorldTransform(), false, fraction);
 
     btScalar max_susp_len = wheel.getSuspensionRestLength()
@@ -280,7 +268,12 @@ btScalar btKart::rayCast(unsigned int index, float fraction)
 
     btAssert(m_vehicleRaycaster);
 
-    void* object = m_vehicleRaycaster->castRay(source,target,rayResults);
+    // Work around a bullet problem: when using a convex hull the raycast
+    // would sometimes hit the chassis (which does not happen when using a
+    // box shape). Therefore the ray ignores the chassis. This changes nothing
+    // in the world, so the karts can cast their rays at the same time.
+    void* object = m_vehicleRaycaster->castRay(source, target, rayResults,
+                                               m_chassisBody);
 
     wheel.m_raycastInfo.m_groundObject = 0;
 
@@ -348,12 +341,6 @@ btScalar btKart::rayCast(unsigned int index, float fraction)
         wheel.m_clippedInvContactDotSuspension = btScalar(1.0);
     }
 
-    if(m_chassisBody->getBroadphaseHandle())
-    {
-        m_chassisBody->getBroadphaseHandle()->m_collisionFilterGroup
-            = old_group;
-    }
-
     return depth;
 
 }   // rayCast
@@ -370,13 +357,6 @@ void btKart::getVisualContactPoint(const btTransform& chassis_trans,
 
     m_visual_wheels_touch_ground = true;
 
-    short int old_group = 0;
-    if (m_chassisBody->getBroadphaseHandle())
-    {
-        old_group = m_chassisBody->getBroadphaseHandle()
-                  ->m_collisionFilterGroup;
-        m_chassisBody->getBroadphaseHandle()->m_collisionFilterGroup = 0;
-    }
     for (int index = 2; index <= 3; index++)
     {
         // Map index 0-1 to wheel 2-3 (which are the rear wheels)
@@ -396,16 +376,12 @@ void btKart::getVisualContactPoint(const btTransform& chassis_trans,
         btVector3 target = source + rayvector;
         btVehicleRaycaster::btVehicleRaycasterResult rayResults;
 
-        void* object = m_vehicleRaycaster->castRay(source, target, rayResults);
+        void* object = m_vehicleRaycaster->castRay(source, target, rayResults,
+                                                   m_chassisBody);
         if(index == 2) *left  = rayResults.m_hitPointInWorld;
         else           *right = rayResults.m_hitPointInWorld;
         m_visual_wheels_touch_ground &= (object != NULL);
     }   // for index in [2,3]
-
-    if (m_chassisBody->getBroadphaseHandle())
-    {
-        m_chassisBody->getBroadphaseHandle()->m_collisionFilterGroup = old_group;
-    }
 }   // getVisualContactPoint
 
 // ----------------------------------------------------------------------------
@@ -425,9 +401,12 @@ void btKart::updateAllWheelPositions()
 }   // updateAllWheelPositions
 
 // ----------------------------------------------------------------------------
-void btKart::updateVehicle( btScalar step )
+/** \param wheels_cast True if updateAllWheelTransformsWS() was already
+ *         called for this step. */
+void btKart::updateVehicle(btScalar step, bool wheels_cast)
 {
-    updateAllWheelTransformsWS();
+    if (!wheels_cast)
+        updateAllWheelTransformsWS();
 
     for(int i=0; i<m_wheelInfo.size(); i++)
         m_wheelInfo[i].m_was_on_ground = m_wheelInfo[i].m_raycastInfo.m_isInContact;

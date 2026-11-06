@@ -69,7 +69,7 @@ private:
     btScalar calcRollingFriction(btWheelContactPoint& contactPoint);
 
     btScalar            m_damping;
-    btVehicleRaycaster *m_vehicleRaycaster;
+    btKartRaycaster    *m_vehicleRaycaster;
 
     /** Sliding (skidding) will only be permited when this is true. Also check
      *  the friction parameter in the wheels since friction directly affects
@@ -140,14 +140,14 @@ public:
      *         (this is used to get access to the kart properties).
      */
                        btKart(btRigidBody* chassis,
-                              btVehicleRaycaster* raycaster,
+                              btKartRaycaster* raycaster,
                               Kart *kart);
      virtual          ~btKart();
     void               reset();
     void               debugDraw(btIDebugDraw* debugDrawer);
     const btTransform& getChassisWorldTransform() const;
     btScalar           rayCast(unsigned int index, float fraction=1.0f);
-    virtual void       updateVehicle(btScalar step);
+    virtual void       updateVehicle(btScalar step, bool wheels_cast=false);
     void               resetSuspension();
     btScalar           getSteeringValue(int wheel) const;
     void               setSteeringValue(btScalar steering,int wheel);

@@ -43,6 +43,21 @@ private:
     /** DEBUG only: origin of raycast. */
     Vec3 m_origin_ray;
 
+    /** A ray cast ahead on another core (see prefetch()): its start and
+     *  end, and its results. */
+    Vec3              m_prefetch_from;
+    btVector3         m_prefetch_to;
+    Vec3              m_prefetch_normal;
+    const Material   *m_prefetch_material;
+    Vec3              m_prefetch_hit_point;
+    /** True if the ray hit something (else m_hit_point is kept). */
+    bool              m_prefetch_hit;
+    /** Batch and job of VitaJobs that cast the ray, -1 if none. */
+    unsigned int      m_prefetch_batch;
+    int               m_prefetch_job = -1;
+
+    static void castPrefetchedRay(void* data, int index);
+
 public:
              TerrainInfo();
              TerrainInfo(const Vec3 &pos);
@@ -50,6 +65,9 @@ public:
 
     bool     getSurfaceInfo(const Vec3 &from, Vec3 *position,
                             const Material **m);
+    void     prefetch(const btMatrix3x3 &rotation, const Vec3 &from);
+    static void startPrefetching();
+    static void finishPrefetching();
     virtual void update(const btMatrix3x3 &rotation, const Vec3 &from);
     virtual void update(const Vec3 &from);
     virtual void update(const Vec3 &from, const Vec3 &towards);

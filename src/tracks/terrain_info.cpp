@@ -24,8 +24,13 @@
 #include "tracks/track_manager.hpp"
 #include "tracks/track_object_manager.hpp"
 #include "utils/constants.hpp"
+#include "utils/vita_jobs.hpp"
 
 #include <math.h>
+#include <vector>
+
+/** The objects whose ray is cast ahead in the current batch. */
+static std::vector<TerrainInfo*> g_prefetching;
 
 /** Constructor to initialise terrain data.
  */
@@ -67,6 +72,64 @@ void TerrainInfo::update(const Vec3 &from)
 }   // update
 
 //-----------------------------------------------------------------------------
+/** Casts on another core the ray that update(rotation, from) will cast,
+ *  when startPrefetching() is called. update() then only waits for it.
+ *  Only the track meshes are hit, which nothing changes while karts update.
+ */
+void TerrainInfo::prefetch(const btMatrix3x3 &rotation, const Vec3 &from)
+{
+    if (g_prefetching.size() >= (size_t)VitaJobs::MAX_JOBS)
+        return;
+    m_prefetch_from = from;
+    btVector3 to(0, -10000.0f, 0);
+    m_prefetch_to = from + rotation*to;
+    m_prefetch_job = (int)g_prefetching.size();
+    g_prefetching.push_back(this);
+}   // prefetch
+
+//-----------------------------------------------------------------------------
+void TerrainInfo::castPrefetchedRay(void* data, int index)
+{
+    TerrainInfo* info = g_prefetching[index];
+    const TriangleMesh &tm = Track::getCurrentTrack()->getTriangleMesh();
+    info->m_prefetch_hit =
+        tm.castRay(info->m_prefetch_from, info->m_prefetch_to,
+                   &info->m_prefetch_hit_point, &info->m_prefetch_material,
+                   &info->m_prefetch_normal, /*interpolate*/true);
+    if (Track::getCurrentTrack()->getTrackObjectManager()
+            ->castRay(info->m_prefetch_from, info->m_prefetch_to,
+                      &info->m_prefetch_hit_point,
+                      &info->m_prefetch_material, &info->m_prefetch_normal,
+                      /*interpolate*/true))
+        info->m_prefetch_hit = true;
+}   // castPrefetchedRay
+
+//-----------------------------------------------------------------------------
+/** Starts casting the rays of all prefetch() calls since the last batch. */
+void TerrainInfo::startPrefetching()
+{
+    if (g_prefetching.empty())
+        return;
+    unsigned int batch = VitaJobs::start(castPrefetchedRay, NULL,
+                                         (int)g_prefetching.size());
+    for (TerrainInfo* info : g_prefetching)
+        info->m_prefetch_batch = batch;
+}   // startPrefetching
+
+//-----------------------------------------------------------------------------
+/** Waits for the rays that were cast ahead, the ones update() did not use
+ *  are dropped. */
+void TerrainInfo::finishPrefetching()
+{
+    if (g_prefetching.empty())
+        return;
+    VitaJobs::finish();
+    for (TerrainInfo* info : g_prefetching)
+        info->m_prefetch_job = -1;
+    g_prefetching.clear();
+}   // finishPrefetching
+
+//-----------------------------------------------------------------------------
 /** Update the terrain information based on the latest position.
  *  \param tran The transform ov the kart
  *  \param from World coordinates from which to start the raycast.
@@ -81,6 +144,26 @@ void TerrainInfo::update(const btMatrix3x3 &rotation, const Vec3 &from)
     // kart rotation, and adding the start point to it.
     btVector3 to(0, -10000.0f, 0);
     to = from + rotation*to;
+
+    // Use the results of the same ray cast ahead, if there is one
+    if (m_prefetch_job >= 0)
+    {
+        VitaJobs::wait(m_prefetch_batch, m_prefetch_job);
+        m_prefetch_job = -1;
+        if (from.getX() == m_prefetch_from.getX() &&
+            from.getY() == m_prefetch_from.getY() &&
+            from.getZ() == m_prefetch_from.getZ() &&
+            to.getX()   == m_prefetch_to.getX()   &&
+            to.getY()   == m_prefetch_to.getY()   &&
+            to.getZ()   == m_prefetch_to.getZ()      )
+        {
+            m_material = m_prefetch_material;
+            m_normal   = m_prefetch_normal;
+            if (m_prefetch_hit)
+                m_hit_point = m_prefetch_hit_point;
+            return;
+        }
+    }
 
     const TriangleMesh &tm = Track::getCurrentTrack()->getTriangleMesh();
     tm.castRay(from, to, &m_hit_point, &m_material, &m_normal,

@@ -39,6 +39,8 @@ public:
                                              collisionConfiguration)
     {
     }
+    // ------------------------------------------------------------------------
+    virtual void updateActions(btScalar timeStep);
 
     /** Resets m_localTime to 0. This allows more precise replay of
      *  physics, which is important for replaying histories. */

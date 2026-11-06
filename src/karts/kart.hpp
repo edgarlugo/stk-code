@@ -38,6 +38,7 @@
 class AbstractKartAnimation;
 class Attachment;
 class btKart;
+class btKartRaycaster;
 class btUprightConstraint;
 class Controller;
 class HitEffect;
@@ -118,7 +119,7 @@ protected:
     /** Handles the powerup of a kart. */
     Powerup *m_powerup;
 
-    std::unique_ptr<btVehicleRaycaster> m_vehicle_raycaster;
+    std::unique_ptr<btKartRaycaster> m_vehicle_raycaster;
 
     std::unique_ptr<btKart> m_vehicle;
 
@@ -332,6 +333,7 @@ public:
     virtual void   crashed          (const Material *m, const Vec3 &normal) OVERRIDE;
     virtual float  getHoT           () const OVERRIDE;
     virtual void   update           (int ticks) OVERRIDE;
+    void           prefetchTerrain  ();
     virtual void   finishedRace     (float time, bool from_server=false) OVERRIDE;
     virtual void   setPosition      (int p) OVERRIDE;
     virtual void   beep             () OVERRIDE;

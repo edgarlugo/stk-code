@@ -1361,6 +1361,26 @@ void Kart::eliminate()
 }   // eliminate
 
 //-----------------------------------------------------------------------------
+/** Lets the terrain ray that update() casts from the wheels be cast ahead on
+ *  another core: it starts where update() will, unless something moves the
+ *  kart before (then update() casts it again).
+ */
+void Kart::prefetchTerrain()
+{
+    if (m_kart_animation || !m_vehicle || !m_body)
+        return;
+    // The transform update() gets from Moveable::update()
+    btTransform trans = getTrans();
+    if (m_body->getInvMass() != 0)
+        m_motion_state->getWorldTransform(trans);
+    Vec3 from(0.0f, 0.0f, 0.0f);
+    for (unsigned int i = 0; i < 4; i++)
+        from += m_vehicle->getWheelInfo(i).m_raycastInfo.m_hardPointWS;
+    from = from/4 + (trans.getBasis() * Vec3(0.0f, 0.3f, 0.0f));
+    m_terrain_info->prefetch(trans.getBasis(), from);
+}   // prefetchTerrain
+
+//-----------------------------------------------------------------------------
 /** Updates the kart in each time step. It updates the physics setting,
  *  particle effects, camera position, etc.
  *  \param dt Time step size.

@@ -34,7 +34,13 @@ public:
     }
 
     virtual void* castRay(const btVector3& from,const btVector3& to,
-                          btVehicleRaycasterResult& result);
+                          btVehicleRaycasterResult& result)
+    {
+        return castRay(from, to, result, NULL);
+    }
+    void* castRay(const btVector3& from, const btVector3& to,
+                  btVehicleRaycasterResult& result,
+                  const btCollisionObject* ignore);
 
 };
 

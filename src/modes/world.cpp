@@ -75,6 +75,7 @@
 #include "states_screens/race_result_gui.hpp"
 #include "states_screens/state_manager.hpp"
 #include "tracks/check_manager.hpp"
+#include "tracks/terrain_info.hpp"
 #include "tracks/track.hpp"
 #include "tracks/track_manager.hpp"
 #include "tracks/track_object.hpp"
@@ -83,6 +84,7 @@
 #include "utils/profiler.hpp"
 #include "utils/translation.hpp"
 #include "utils/string_utils.hpp"
+#include "utils/vita_jobs.hpp"
 
 #include <IrrlichtDevice.h>
 #include <ISceneManager.h>
@@ -1200,6 +1202,18 @@ void World::update(int ticks)
     // which causes all AI steering commands set. So in the following
     // physics update the new steering is taken into account.
     const int kart_amount = (int)m_karts.size();
+    // Each kart casts a ray to the terrain while it updates: the rays are cast
+    // ahead on the other cores, so the updates mostly pick up the results
+    if (kart_amount > 1 && VitaJobs::isEnabled())
+    {
+        for (int i = 0 ; i < kart_amount; ++i)
+        {
+            Kart* kart = dynamic_cast<Kart*>(m_karts[i].get());
+            if (kart && !kart->isEliminated())
+                kart->prefetchTerrain();
+        }
+        TerrainInfo::startPrefetching();
+    }
     for (int i = 0 ; i < kart_amount; ++i)
     {
         SpareTireAI* sta =
@@ -1210,6 +1224,7 @@ void World::update(int ticks)
         if (isStartPhase())
             m_karts[i]->makeKartRest();
     }
+    TerrainInfo::finishPrefetching();
     PROFILER_POP_CPU_MARKER();
     if(RaceManager::get()->isRecordingRace()) ReplayRecorder::get()->update(ticks);
 

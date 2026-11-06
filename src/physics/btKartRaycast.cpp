@@ -19,22 +19,34 @@
 #include "physics/triangle_mesh.hpp"
 #include "tracks/track.hpp"
 
+/** \param ignore An object the ray does not hit (the chassis of the kart
+ *         that casts it), or NULL. */
 void* btKartRaycaster::castRay(const btVector3& from, const btVector3& to,
-                               btVehicleRaycasterResult& result)
+                               btVehicleRaycasterResult& result,
+                               const btCollisionObject* ignore)
 {
     // ========================================================================
     class ClosestWithNormal : public btCollisionWorld::ClosestRayResultCallback
     {
     private:
         int m_triangle_index;
+        const btCollisionObject* m_ignore;
     public:
         /** Constructor, initialises the triangle index. */
         ClosestWithNormal(const btVector3 &from,
-                          const btVector3 &to)
+                          const btVector3 &to,
+                          const btCollisionObject* ignore)
                           : btCollisionWorld::ClosestRayResultCallback(from,to)
         {
             m_triangle_index = -1;
+            m_ignore = ignore;
         }   // CloestWithNormal
+        // --------------------------------------------------------------------
+        virtual bool needsCollision(btBroadphaseProxy* proxy0) const
+        {
+            return proxy0->m_clientObject != m_ignore &&
+                btCollisionWorld::ClosestRayResultCallback::needsCollision(proxy0);
+        }
         // --------------------------------------------------------------------
         /** Stores the index of the triangle hit. */
         virtual    btScalar addSingleResult(btCollisionWorld::LocalRayResult& rayResult,
@@ -57,7 +69,7 @@ void* btKartRaycaster::castRay(const btVector3& from, const btVector3& to,
     };   // CloestWithNormal
     // ========================================================================
 
-    ClosestWithNormal rayCallback(from,to);
+    ClosestWithNormal rayCallback(from, to, ignore);
 
     m_dynamicsWorld->rayTest(from, to, rayCallback);
 
