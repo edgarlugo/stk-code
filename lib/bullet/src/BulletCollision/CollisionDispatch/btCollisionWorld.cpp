@@ -499,9 +499,14 @@ void	btCollisionWorld::rayTestSingle(const btTransform& rayFromTrans,const btTra
 						const btTransform& childTrans = m_compoundShape->getChildTransform(i);
 						btTransform childWorldTrans = m_colObjWorldTransform * childTrans;
 						
+#ifndef __vita__
 						// replace collision shape so that callback can determine the triangle
 						btCollisionShape* saveCollisionShape = m_collisionObject->getCollisionShape();
 						m_collisionObject->internalSetTemporaryCollisionShape((btCollisionShape*)childCollisionShape);
+#endif
+						// On the Vita the karts cast their rays on several threads: two rays
+						// on the same compound object (another kart) would each save and
+						// restore its shape, and could leave the child shape on it
 
 						LocalInfoAdder2 my_cb(i, &m_resultCallback);
 
@@ -513,8 +518,10 @@ void	btCollisionWorld::rayTestSingle(const btTransform& rayFromTrans,const btTra
 							childWorldTrans,
 							my_cb);
 						
+#ifndef __vita__
 						// restore
 						m_collisionObject->internalSetTemporaryCollisionShape(saveCollisionShape);
+#endif
 					}
 					
 					void Process(const btDbvtNode* leaf)
