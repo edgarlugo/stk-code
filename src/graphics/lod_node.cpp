@@ -25,6 +25,7 @@
 
 #include <ISceneManager.h>
 #include <ICameraSceneNode.h>
+#include <SViewFrustum.h>
 #include <IMeshSceneNode.h>
 #include <IAnimatedMeshSceneNode.h>
 
@@ -54,6 +55,9 @@ LODNode::LODNode(std::string group_name, scene::ISceneNode* parent,
     m_animated_level = -1;
     m_animated_time = 0;
     m_lod_distances_updated = false;
+    m_view_box_children = -1;
+    m_view_box_static = false;
+    m_view_box_valid = false;
     m_min_switch_distance = 0;
 }
 
@@ -142,6 +146,11 @@ void LODNode::OnAnimate(u32 timeMs)
             // is still needed to compute the distance to the camera.
             m_animated_level = m_forced_lod > -1 ? m_forced_lod : m_current_level;
             m_animated_time = timeMs;
+            // Static mesh levels (see isOutOfView) only change when they move
+            if (m_view_box_static && !UpdatedAbsTrans && Animators.empty() &&
+                m_view_box_children == (int)Children.size() &&
+                !m_update_box_every_frame)
+                return;
             if (m_animated_level >= 0)
                 m_nodes[m_animated_level]->OnAnimate(timeMs);
             if (m_animated_level != 0)
@@ -159,7 +168,9 @@ void LODNode::OnAnimate(u32 timeMs)
             Box = m_nodes[m_detail.size() - 1]->getBoundingBox();
 
         // If this node has children other than the LOD nodes, animate it
-        for (unsigned i = 0; i < Children.size(); ++i)
+        // (the levels are children too)
+        for (unsigned i = 0; Children.size() > m_nodes.size() &&
+                             i < Children.size(); ++i)
         {
             if (m_nodes_set.find(Children[i]) == m_nodes_set.end())
             {
@@ -187,8 +198,67 @@ void LODNode::updateVisibility()
     }
 }
 
+// ----------------------------------------------------------------------------
+/** True if all children are static mesh levels whose boxes are out of the
+ *  camera frustum: each of them would be culled anyway, so neither the level
+ *  needs choosing nor the node registering. */
+bool LODNode::isOutOfView()
+{
+    const scene::ICameraSceneNode* cam = SceneManager->getActiveCamera();
+    if (cam == NULL || m_nodes.empty())
+        return false;
+    if (m_view_box_children != (int)Children.size())
+    {
+        m_view_box_children = (int)Children.size();
+        m_view_box_static = Children.size() == m_nodes.size();
+        for (unsigned i = 0; i < Children.size() && m_view_box_static; i++)
+        {
+            m_view_box_static = Children[i]->getType() == scene::ESNT_MESH &&
+                Children[i]->getChildren().empty() &&
+                Children[i]->getAnimators().empty();
+        }
+        m_view_box_valid = false;
+    }
+    if (!m_view_box_static)
+        return false;
+    if (!m_view_box_valid || m_view_box_matrix != AbsoluteTransformation)
+    {
+        m_view_box_valid = true;
+        m_view_box_matrix = AbsoluteTransformation;
+        for (unsigned i = 0; i < m_nodes.size(); i++)
+        {
+            core::aabbox3d<f32> box = m_nodes[i]->getBoundingBox();
+            (AbsoluteTransformation * m_nodes[i]->getRelativeTransformation())
+                .transformBoxEx(box);
+            if (i == 0)
+                m_view_box = box;
+            else
+                m_view_box.addInternalBox(box);
+        }
+    }
+    const scene::SViewFrustum& frust = *cam->getViewFrustum();
+    for (s32 i = 0; i < scene::SViewFrustum::VF_PLANE_COUNT; i++)
+    {
+        // The box corner nearest to the inside of the plane (the normals
+        // point out)
+        const core::plane3df& plane = frust.planes[i];
+        const core::vector3df corner(
+            plane.Normal.X >= 0.0f ? m_view_box.MinEdge.X : m_view_box.MaxEdge.X,
+            plane.Normal.Y >= 0.0f ? m_view_box.MinEdge.Y : m_view_box.MaxEdge.Y,
+            plane.Normal.Z >= 0.0f ? m_view_box.MinEdge.Z : m_view_box.MaxEdge.Z);
+        if (plane.Normal.dotProduct(corner) + plane.D > 0.0f)
+            return true;
+    }
+    return false;
+}   // isOutOfView
+
+// ----------------------------------------------------------------------------
 void LODNode::OnRegisterSceneNode()
 {
+#ifndef SERVER_ONLY
+    if (!CVS->isGLSL() && isVisible() && isOutOfView())
+        return;
+#endif
     updateVisibility();
 
 #ifndef SERVER_ONLY
@@ -208,7 +278,8 @@ void LODNode::OnRegisterSceneNode()
                 m_nodes[level]->OnAnimate(m_animated_time);
             m_nodes[level]->OnRegisterSceneNode();
         }
-        for (unsigned i = 0; i < Children.size(); i++)
+        for (unsigned i = 0; Children.size() > m_nodes.size() &&
+                             i < Children.size(); i++)
         {
             if (m_nodes_set.find(Children[i]) == m_nodes_set.end())
                 Children[i]->OnRegisterSceneNode();

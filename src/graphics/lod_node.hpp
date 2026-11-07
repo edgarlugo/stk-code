@@ -78,6 +78,17 @@ private:
 
     bool m_update_box_every_frame;
     bool m_lod_distances_updated;
+
+    /** Fixed pipeline: box of the levels in world space, made for the
+     *  absolute transformation m_view_box_matrix, and the number of children
+     *  m_view_box_children it was checked with (-1: to check). */
+    core::aabbox3d<f32> m_view_box;
+    core::matrix4 m_view_box_matrix;
+    int m_view_box_children;
+    bool m_view_box_static;
+    bool m_view_box_valid;
+
+    bool isOutOfView();
 public:
 
     LODNode(std::string group_name, scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id=-1);
