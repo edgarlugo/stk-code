@@ -19,10 +19,18 @@
 #include "utils/vita_jobs.hpp"
 
 #include "network/network_config.hpp"
+#include "utils/log.hpp"
 
 #ifdef __VITA__
 #include <psp2/kernel/threadmgr.h>
-#include <thread>
+#include <pthread.h>
+#include <stdint.h>
+
+// main.cpp wraps pthread_create to give every thread a 2 MB stack: the real
+// one keeps the small stacks of the pool
+extern "C" int __real_pthread_create(pthread_t* thread,
+                                     const pthread_attr_t* attr,
+                                     void* (*start)(void*), void* arg);
 #endif
 
 namespace VitaJobs
@@ -31,6 +39,11 @@ namespace VitaJobs
 namespace
 {
     const int THREADS = 2;
+    /** The jobs need little stack, and the system has little memory left
+     *  for thread stacks next to a race. */
+    const size_t STACK_SIZE = 256 * 1024;
+    /** Threads of the pool that could be created. */
+    int g_threads = 0;
     thread_local int g_thread_index = 0;
     /** Signalled once per thread for each batch. */
     SceUID g_semaphore = -1;
@@ -77,8 +90,9 @@ namespace
     }   // runFreeJobs
 
     // ------------------------------------------------------------------------
-    void threadMain(int index)
+    void* threadMain(void* arg)
     {
+        const int index = (int)(intptr_t)arg;
         g_thread_index = index;
         sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(),
                                              SCE_KERNEL_CPU_MASK_USER_0 << index);
@@ -88,25 +102,41 @@ namespace
             runFreeJobs();
             __atomic_sub_fetch(&g_out, 1, __ATOMIC_RELEASE);
         }
+        return NULL;
     }   // threadMain
 
     // ------------------------------------------------------------------------
     bool startThreads()
     {
-        static bool started = false;
-        if (started)
-            return true;
+        static bool tried = false;
+        if (tried)
+            return g_threads > 0;
+        tried = true;
         g_semaphore = sceKernelCreateSema("stk_jobs", 0, 0, THREADS, NULL);
         if (g_semaphore < 0)
             return false;
-        // The main thread keeps the first core, the threads of the pool get
-        // one of the others each
-        sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(),
-                                             SCE_KERNEL_CPU_MASK_USER_0);
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, STACK_SIZE);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        // The threads of the pool get one of the other cores each
         for (int i = 1; i <= THREADS; i++)
-            std::thread(threadMain, i).detach();
-        started = true;
-        return true;
+        {
+            pthread_t thread;
+            if (__real_pthread_create(&thread, &attr, threadMain,
+                                      (void*)(intptr_t)i) != 0)
+                break;
+            g_threads++;
+        }
+        pthread_attr_destroy(&attr);
+        Log::info("VitaJobs", "%d of %d threads started.", g_threads, THREADS);
+        // and the main thread keeps the first one
+        if (g_threads > 0)
+        {
+            sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(),
+                                                 SCE_KERNEL_CPU_MASK_USER_0);
+        }
+        return g_threads > 0;
     }   // startThreads
 }   // namespace
 #endif
@@ -138,8 +168,8 @@ unsigned int start(JobFunction function, void* data, int count)
         g_next     = 0;
         for (int i = 0; i < count; i++)
             g_state[i] = 0;
-        __atomic_store_n(&g_out, THREADS, __ATOMIC_RELEASE);
-        sceKernelSignalSema(g_semaphore, THREADS);
+        __atomic_store_n(&g_out, g_threads, __ATOMIC_RELEASE);
+        sceKernelSignalSema(g_semaphore, g_threads);
         return g_batch;
     }
 #endif
