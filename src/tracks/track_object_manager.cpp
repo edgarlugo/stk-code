@@ -30,12 +30,16 @@
 #include "physics/physical_object.hpp"
 #include "tracks/track_object.hpp"
 #include "utils/log.hpp"
+#ifdef __vita__
+#include "utils/vita_jobs.hpp"
+#endif
 
 #include <IMeshSceneNode.h>
 #include <ISceneManager.h>
 
 TrackObjectManager::TrackObjectManager()
 {
+    m_pose_job_count = 0;
 }   // TrackObjectManager
 
 // ----------------------------------------------------------------------------
@@ -195,7 +199,56 @@ void TrackObjectManager::updateGraphics(float dt)
             if (curr->needsUpdateGraphics())
                 m_objects_to_update_graphics.push_back(curr);
         }
+#ifdef __vita__
+        // The poses of the graphics only animations only depend on the
+        // world time: they are computed on the other cores, a job for a few
+        // of them, while the objects are updated here in the same order
+        m_pose_animations.clear();
+        m_pose_jobs.assign(m_objects_to_update_graphics.size(), -1);
+        std::vector<unsigned> indices;
+        for (unsigned int i = 0; i < m_objects_to_update_graphics.size(); i++)
+        {
+            TrackObject* curr = m_objects_to_update_graphics[i];
+            if (curr->getAnimator() && !curr->getPhysicalObject())
+            {
+                m_pose_animations.push_back(curr->getAnimator());
+                indices.push_back(i);
+            }
+        }
+        const int n = (int)m_pose_animations.size();
+        m_pose_job_count = std::min(n, 24);
+        for (int job = 0; job < m_pose_job_count; job++)
+        {
+            for (int a = job * n / m_pose_job_count;
+                 a < (job + 1) * n / m_pose_job_count; a++)
+                m_pose_jobs[indices[a]] = job;
+        }
+#endif
     }
+
+#ifdef __vita__
+    if (m_pose_job_count > 1 && VitaJobs::isEnabled())
+    {
+        unsigned int batch = VitaJobs::start(computePoses, this,
+                                             m_pose_job_count);
+        for (unsigned int i = 0; i < m_objects_to_update_graphics.size(); i++)
+        {
+            if (m_pose_jobs[i] >= 0)
+                VitaJobs::wait(batch, m_pose_jobs[i]);
+            m_objects_to_update_graphics[i]->updateGraphics(dt);
+            if (m_update_graphics_list_dirty)
+            {
+                // Poses computed for objects not updated are dropped
+                VitaJobs::finish();
+                for (ThreeDAnimation* animation : m_pose_animations)
+                    animation->clearPrecomputedPose();
+                return;
+            }
+        }
+        VitaJobs::finish();
+        return;
+    }
+#endif
 
     for (unsigned int i = 0; i < m_objects_to_update_graphics.size(); i++)
     {
@@ -204,6 +257,19 @@ void TrackObjectManager::updateGraphics(float dt)
             return;
     }
 }   // updateGraphics
+
+#ifdef __vita__
+// ----------------------------------------------------------------------------
+/** Job of updateGraphics(): computes the poses of a few animations. */
+void TrackObjectManager::computePoses(void* data, int job)
+{
+    TrackObjectManager* tom = (TrackObjectManager*)data;
+    const int n = (int)tom->m_pose_animations.size();
+    for (int a = job * n / tom->m_pose_job_count;
+         a < (job + 1) * n / tom->m_pose_job_count; a++)
+        tom->m_pose_animations[a]->precomputePose();
+}   // computePoses
+#endif
 
 // ----------------------------------------------------------------------------
 /** Updates all track objects.

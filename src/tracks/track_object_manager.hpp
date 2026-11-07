@@ -60,6 +60,15 @@ protected:
     std::vector<TrackObject*> m_objects_to_update_graphics;
     static bool m_update_graphics_list_dirty;
 
+    /** Graphics only animations of m_objects_to_update_graphics, whose poses
+     *  are computed on the other cores, and for each object of that list the
+     *  job that computes its pose (-1 if none). */
+    std::vector<ThreeDAnimation*> m_pose_animations;
+    std::vector<int> m_pose_jobs;
+    int m_pose_job_count;
+
+    static void computePoses(void* data, int job);
+
 public:
          TrackObjectManager();
         ~TrackObjectManager();

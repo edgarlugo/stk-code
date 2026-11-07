@@ -57,6 +57,8 @@ ThreeDAnimation::ThreeDAnimation(const XMLNode &node, TrackObject* object) : Ani
                         object->getInitRotation() );
     m_hpr = object->getInitRotation();
     m_rotation_valid = false;
+    m_pose_ready = false;
+    m_pose_precomputed = false;
 
     assert(!std::isnan(m_hpr.getX()));
     assert(!std::isnan(m_hpr.getY()));
@@ -81,6 +83,21 @@ void ThreeDAnimation::updateWithWorldTicks(bool has_physics)
         (!has_physics && track_object_with_physics))
         return;
 
+    if (!m_pose_precomputed)
+        computePose();
+    m_pose_precomputed = false;
+    applyPose();
+}   // updateWithWorldTicks
+
+// ----------------------------------------------------------------------------
+/** Computes the position, rotation and scale of the object for the current
+ *  world time; applyPose() then moves the object. This only reads the object
+ *  and the world, so the poses of different objects can be computed on other
+ *  threads (TrackObjectManager::updateGraphics).
+ */
+void ThreeDAnimation::computePose()
+{
+    m_pose_ready = false;
     Vec3 xyz   = m_object->getPosition();
     Vec3 scale = m_object->getScale();
 
@@ -119,14 +136,23 @@ void ThreeDAnimation::updateWithWorldTicks(bool has_physics)
         m_last_hpr = m_hpr;
         m_rotation_valid = true;
     }
-    const core::vector3df& hpr = m_last_rotation;
-    //m_node->setRotation(hpr);
+    //m_node->setRotation(m_last_rotation);
 
-    if (m_object)
+    m_pose_xyz = xyz;
+    m_pose_scale = scale;
+    m_pose_ready = true;
+}   // computePose
+
+// ----------------------------------------------------------------------------
+/** Moves the object to the pose made by computePose(). */
+void ThreeDAnimation::applyPose()
+{
+    if (m_pose_ready && m_object)
     {
-        m_object->move(xyz.toIrrVector(), hpr, scale.toIrrVector(), true, false);
+        m_object->move(m_pose_xyz.toIrrVector(), m_last_rotation,
+                       m_pose_scale.toIrrVector(), true, false);
     }
-}   // update
+}   // applyPose
 
 // ----------------------------------------------------------------------------
 /** Copying to child process of track object.

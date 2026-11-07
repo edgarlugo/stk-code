@@ -69,6 +69,15 @@ private:
     core::vector3df       m_last_rotation;
     bool                  m_rotation_valid;
 
+    /** Position and scale computed by computePose(), and if they are to be
+     *  applied by applyPose(). */
+    Vec3                  m_pose_xyz;
+    Vec3                  m_pose_scale;
+    bool                  m_pose_ready;
+
+    /** True if computePose() already ran for the next updateWithWorldTicks(). */
+    bool                  m_pose_precomputed;
+
     /**
       * If true, play animation even when GFX are disabled
       */
@@ -80,6 +89,15 @@ public:
     virtual void update(float dt) {}
     // ------------------------------------------------------------------------
     void updateWithWorldTicks(bool with_physics);
+    // ------------------------------------------------------------------------
+    void computePose();
+    // ------------------------------------------------------------------------
+    void applyPose();
+    // ------------------------------------------------------------------------
+    /** Computes the pose for the next updateWithWorldTicks() ahead. */
+    void precomputePose() { computePose(); m_pose_precomputed = true; }
+    // ------------------------------------------------------------------------
+    void clearPrecomputedPose() { m_pose_precomputed = false; }
     // ------------------------------------------------------------------------
     /** Returns true if a collision with this object should
      * trigger a rescue. */
