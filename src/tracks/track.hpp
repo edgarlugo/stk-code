@@ -162,6 +162,9 @@ private:
 
     /** Nodes drawing the static objects merged by mergeStaticObjects. */
     std::vector<scene::ISceneNode*> m_merged_nodes;
+    /** Nodes hidden for good by mergeStaticObjects, taken out of the scene
+     *  graph and kept until the track objects are gone. */
+    std::vector<scene::ISceneNode*> m_detached_nodes;
 
     /** The texture atlases of these merged objects. */
     std::vector<video::ITexture*> m_merged_atlases;

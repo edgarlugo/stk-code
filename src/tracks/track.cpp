@@ -386,6 +386,10 @@ void Track::cleanup()
     delete m_track_object_manager;
     m_track_object_manager = NULL;
 
+    for (unsigned int i = 0; i < m_detached_nodes.size(); i++)
+        m_detached_nodes[i]->drop();
+    m_detached_nodes.clear();
+
     for (unsigned int i = 0; i < m_object_physics_only_nodes.size(); i++)
     {
         m_object_physics_only_nodes[i]->drop();
@@ -2229,6 +2233,18 @@ void Track::mergeStaticObjects()
             hidden_libraries++;
             changed = true;
         }
+    }
+
+    // Hidden nodes are still walked twice per frame by their parents (most
+    // are children of the root): the topmost ones leave the scene graph. The
+    // track objects keep pointers to them, so they live until those are gone.
+    for (scene::ISceneNode* node : hidden)
+    {
+        if (node->getParent() == NULL || hidden.count(node->getParent()))
+            continue;
+        node->grab();
+        node->remove();
+        m_detached_nodes.push_back(node);
     }
     Log::info("Track", "Merged %d static objects into %d nodes, %d vertices "
               "(%d KB), %d library instances hidden.", (int)merged.size(),
