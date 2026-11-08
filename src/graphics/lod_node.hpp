@@ -46,6 +46,8 @@ namespace irr
  * \brief manages level-of-detail
  * \ingroup graphics
  */
+namespace irr { namespace scene { class ICameraSceneNode; } }
+
 class LODNode : public scene::ISceneNode
 {
 private:
@@ -88,7 +90,6 @@ private:
     bool m_view_box_static;
     bool m_view_box_valid;
 
-    bool isOutOfView();
 public:
 
     LODNode(std::string group_name, scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id=-1);
@@ -126,6 +127,21 @@ public:
     void autoComputeLevel(float scale);
 
     void forceLevelOfDetail(int n);
+    // ------------------------------------------------------------------------
+    bool isOutOfView(const scene::ICameraSceneNode* cam);
+    // ------------------------------------------------------------------------
+    /** With the shader-based renderer, animates the level to draw if
+     *  OnAnimate animated another one, as OnRegisterSceneNode does with the
+     *  fixed pipeline. */
+    void animateDrawnLevel()
+    {
+        int level = getLevel();
+        if (level >= 0 && level != m_animated_level)
+        {
+            m_nodes[level]->OnAnimate(m_animated_time);
+            m_animated_level = level;
+        }
+    }
 
     /** Squared distances up to which each level is shown */
     const std::vector<int>& getDetail() const { return m_detail; }

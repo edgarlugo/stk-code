@@ -17,6 +17,7 @@
 
 #ifndef SERVER_ONLY
 #include "graphics/draw_calls.hpp"
+#include "graphics/central_settings.hpp"
 
 #include "config/stk_config.hpp"
 #include "config/user_config.hpp"
@@ -153,7 +154,11 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
         if (type == ESNT_LOD_NODE)
         {
             LODNode *node = static_cast<LODNode *>(List[i]);
+            // With shadows the SP also culls against the shadow cascades
+            if (!CVS->isDeferredEnabled() && node->isOutOfView(cam))
+                continue;
             node->updateVisibility();
+            node->animateDrawnLevel();
 
             // One child array per LOD depth, reused every frame
             static core::array<scene::ISceneNode*> lod_child[8];
@@ -164,7 +169,8 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
             child.set_used(0);
             if (node->getLevel() >= 0)
                 child.push_back(node->getAllNodes()[node->getLevel()]);
-            for (unsigned int i = 0; i < node->getChildren().size(); i++)
+            for (unsigned int i = 0; node->getChildren().size() >
+                node->getAllNodes().size() && i < node->getChildren().size(); i++)
             {
                 if (node->getNodesSet().find(node->getChildren()[i]) == node->getNodesSet().end())
                     child.push_back(node->getChildren()[i]);

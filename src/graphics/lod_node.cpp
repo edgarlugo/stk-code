@@ -26,6 +26,9 @@
 #include <ISceneManager.h>
 #include <ICameraSceneNode.h>
 #include <SViewFrustum.h>
+#ifndef SERVER_ONLY
+#include "graphics/sp/sp_mesh_node.hpp"
+#endif
 #include <IMeshSceneNode.h>
 #include <IAnimatedMeshSceneNode.h>
 
@@ -139,11 +142,11 @@ void LODNode::OnAnimate(u32 timeMs)
         updateAbsolutePosition();
 
 #ifndef SERVER_ONLY
-        if (!CVS->isGLSL())
         {
             // Only the level drawn last frame is animated here: OnRegisterSceneNode
-            // animates the new one if the level changes. The first level's position
-            // is still needed to compute the distance to the camera.
+            // (animateDrawnLevel with the shader-based renderer) animates the
+            // new one if the level changes. The first level's position is
+            // still needed to compute the distance to the camera.
             m_animated_level = m_forced_lod > -1 ? m_forced_lod : m_current_level;
             m_animated_time = timeMs;
             // Static mesh levels (see isOutOfView) only change when they move
@@ -156,13 +159,13 @@ void LODNode::OnAnimate(u32 timeMs)
             if (m_animated_level != 0)
                 m_nodes[0]->updateAbsolutePosition();
         }
-        else
-#endif
+#else
         for (size_t i = 0; i < m_nodes.size(); i++)
         {
             m_nodes[i]->setVisible(true);
             m_nodes[i]->OnAnimate(timeMs);
         }
+#endif
 
         if (m_update_box_every_frame)
             Box = m_nodes[m_detail.size() - 1]->getBoundingBox();
@@ -201,10 +204,12 @@ void LODNode::updateVisibility()
 // ----------------------------------------------------------------------------
 /** True if all children are static mesh levels whose boxes are out of the
  *  camera frustum: each of them would be culled anyway, so neither the level
- *  needs choosing nor the node registering. */
-bool LODNode::isOutOfView()
+ *  needs choosing nor the node registering or walking. */
+bool LODNode::isOutOfView(const scene::ICameraSceneNode* cam)
 {
-    const scene::ICameraSceneNode* cam = SceneManager->getActiveCamera();
+#ifdef SERVER_ONLY
+    return false;
+#else
     if (cam == NULL || m_nodes.empty())
         return false;
     if (m_view_box_children != (int)Children.size())
@@ -213,7 +218,13 @@ bool LODNode::isOutOfView()
         m_view_box_static = Children.size() == m_nodes.size();
         for (unsigned i = 0; i < Children.size() && m_view_box_static; i++)
         {
-            m_view_box_static = Children[i]->getType() == scene::ESNT_MESH &&
+            // Plain meshes with the fixed pipeline, SP meshes without
+            // skeletal animation with the shader-based renderer
+            const scene::ESCENE_NODE_TYPE type = Children[i]->getType();
+            m_view_box_static = (CVS->isGLSL() ?
+                type == scene::ESNT_ANIMATED_MESH &&
+                !static_cast<SP::SPMeshNode*>(Children[i])->getAnimationState() :
+                type == scene::ESNT_MESH) &&
                 Children[i]->getChildren().empty() &&
                 Children[i]->getAnimators().empty();
         }
@@ -250,13 +261,15 @@ bool LODNode::isOutOfView()
             return true;
     }
     return false;
+#endif
 }   // isOutOfView
 
 // ----------------------------------------------------------------------------
 void LODNode::OnRegisterSceneNode()
 {
 #ifndef SERVER_ONLY
-    if (!CVS->isGLSL() && isVisible() && isOutOfView())
+    if (!CVS->isGLSL() && isVisible() &&
+        isOutOfView(SceneManager->getActiveCamera()))
         return;
 #endif
     updateVisibility();
