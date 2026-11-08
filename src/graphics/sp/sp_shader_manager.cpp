@@ -17,6 +17,10 @@
 
 #include "graphics/sp/sp_shader_manager.hpp"
 #include "utils/file_utils.hpp"
+#include "graphics/central_settings.hpp"
+#include <cctype>
+#include <cstdio>
+#include <sstream>
 #include <fstream>
 #include <iterator>
 #include "io/file_manager.hpp"
@@ -413,6 +417,132 @@ std::string SPShaderManager::getShaderFullPath(const std::string& name)
 }   // getShaderFullPath
 
 // ----------------------------------------------------------------------------
+/** Text of a shader file, found as ShaderFilesManager::getShaderFile
+ *  does, without its "?..." suffix. */
+static std::string readShaderText(const std::string& file)
+{
+    std::string path = file.substr(0, file.find('?'));
+    if (path.find('/') == std::string::npos &&
+        path.find('\\') == std::string::npos)
+    {
+        path = std::string(file_manager->getFileSystem()->getAbsolutePath(
+            file_manager->getShadersDir().c_str()).c_str()) + path;
+    }
+    std::ifstream in(FileUtils::getPortableReadingPath(path));
+    return std::string((std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
+}   // readShaderText
+
+// ----------------------------------------------------------------------------
+static bool hasWord(const std::string& text, const std::string& word)
+{
+    for (size_t pos = text.find(word); pos != std::string::npos;
+        pos = text.find(word, pos + 1))
+    {
+        const bool start = pos == 0 ||
+            !(isalnum((unsigned char)text[pos - 1]) || text[pos - 1] == '_');
+        const size_t end = pos + word.size();
+        const bool finish = end == text.size() ||
+            !(isalnum((unsigned char)text[end]) || text[end] == '_');
+        if (start && finish)
+            return true;
+    }
+    return false;
+}   // hasWord
+
+// ----------------------------------------------------------------------------
+/** The vertex shader of a program as "<file>?keep=<outputs>" with only the
+ *  outputs its fragment shader reads. vitaGL compiles the vertex and the
+ *  fragment shaders apart, so it can't drop the outputs a program doesn't
+ *  use, and on the Vita each of them goes through the parameter buffer: in
+ *  Black Forest the unused ones cost ~11 ms of GPU per frame. Blocks of
+ *  Advanced_Lighting_Enabled and Vita_No_Hue are evaluated when looking for
+ *  reads, any other condition is taken as active. */
+static std::string keepReadOutputs(const std::string& vertex,
+                                   const std::string& fragment)
+{
+#ifndef __vita__
+    // Other drivers drop the unused outputs when linking
+    return vertex;
+#endif
+    if (vertex.empty() || fragment.empty())
+        return vertex;
+    const std::string vert = readShaderText(vertex);
+    const std::string frag = readShaderText(fragment);
+    if (vert.empty() || frag.empty())
+        return vertex;
+    const bool no_hue = fragment.size() > 6 &&
+        fragment.compare(fragment.size() - 6, 6, "?nohue") == 0;
+
+    // Code of the fragment shader that is compiled: 1 active, 0 not, 2 unknown
+    std::string active;
+    std::vector<int> conditions;
+    std::istringstream frag_lines(frag);
+    std::string line;
+    while (std::getline(frag_lines, line))
+    {
+        const size_t first = line.find_first_not_of(" \t");
+        const std::string t = first == std::string::npos ? "" :
+            line.substr(first);
+        if (t.compare(0, 3, "#if") == 0)
+        {
+            int state = 2;
+            if (t.find("&&") == std::string::npos &&
+                t.find("||") == std::string::npos)
+            {
+                const bool negated = t.find('!') != std::string::npos ||
+                    t.compare(0, 7, "#ifndef") == 0;
+                if (t.find("Advanced_Lighting_Enabled") != std::string::npos)
+                    state = CVS->isDeferredEnabled() != negated ? 1 : 0;
+                else if (t.find("Vita_No_Hue") != std::string::npos)
+                    state = no_hue != negated ? 1 : 0;
+            }
+            conditions.push_back(state);
+            continue;
+        }
+        if (t.compare(0, 5, "#else") == 0)
+        {
+            if (!conditions.empty() && conditions.back() != 2)
+                conditions.back() = 1 - conditions.back();
+            continue;
+        }
+        if (t.compare(0, 5, "#elif") == 0)
+        {
+            if (!conditions.empty())
+                conditions.back() = 2;
+            continue;
+        }
+        if (t.compare(0, 6, "#endif") == 0)
+        {
+            if (!conditions.empty())
+                conditions.pop_back();
+            continue;
+        }
+        bool on = true;
+        for (int c : conditions)
+            on = on && c != 0;
+        if (on && t.compare(0, 3, "in ") != 0)
+            active += line + "\n";
+    }
+
+    std::string keep;
+    bool all = true;
+    std::istringstream vert_lines(vert);
+    while (std::getline(vert_lines, line))
+    {
+        char out_type[32], out_name[64];
+        if (sscanf(line.c_str(), " out %31s %63[A-Za-z0-9_]", out_type,
+            out_name) != 2)
+            continue;
+        if (hasWord(active, out_name))
+            keep += (keep.empty() ? "" : ",") + std::string(out_name);
+        else
+            all = false;
+    }
+    return all ? vertex : vertex + "?keep=" + keep;
+}   // keepReadOutputs
+
+// ----------------------------------------------------------------------------
 std::shared_ptr<SPShader> SPShaderManager::buildSPShader(const ShaderInfo& si,
     const std::array<PassInfo, 2>& pi, const UniformAssigners& ua,
     bool skinned)
@@ -432,9 +562,10 @@ std::shared_ptr<SPShader> SPShaderManager::buildSPShader(const ShaderInfo& si,
                 pou->addAssignerFunction(p.first, p.second);
             }
 
-            shader->addShaderFile(skinned ?
+            // Only the outputs the fragment shader reads
+            shader->addShaderFile(keepReadOutputs(skinned ?
                 pi[0].m_skinned_mesh_shader : pi[0].m_vertex_shader,
-                GL_VERTEX_SHADER, RP_1ST);
+                pi[0].m_fragment_shader), GL_VERTEX_SHADER, RP_1ST);
             if (!pi[0].m_fragment_shader.empty())
             {
                 shader->addShaderFile(pi[0].m_fragment_shader,

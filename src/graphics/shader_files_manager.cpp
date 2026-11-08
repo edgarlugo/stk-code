@@ -227,7 +227,42 @@ ShaderFilesManager::SharedShader ShaderFilesManager::loadShader
 
     code << getHeader();
 
-    readFile(file_path, code);
+    // "<file>?keep=a,b" is <file> with its outputs other than a and b
+    // turned into locals of main, so their code goes away
+    const size_t keep_pos = file_path.find("?keep=");
+    if (keep_pos == std::string::npos)
+        readFile(file_path, code);
+    else
+    {
+        const std::string keep = "," + file_path.substr(keep_pos + 6) + ",";
+        file_path.resize(keep_pos);
+        std::ostringstream body;
+        readFile(file_path, body);
+        std::istringstream lines(body.str());
+        std::string line, locals;
+        bool before_main = false;
+        while (std::getline(lines, line))
+        {
+            char out_type[32], out_name[64];
+            if (sscanf(line.c_str(), " out %31s %63[A-Za-z0-9_]", out_type,
+                out_name) == 2 && keep.find("," + std::string(out_name) +
+                ",") == std::string::npos)
+            {
+                locals += std::string("    ") + out_type + " " + out_name +
+                    ";\n";
+                continue;
+            }
+            code << line << "\n";
+            if (line.find("void main") != std::string::npos)
+                before_main = true;
+            if (before_main && line.find('{') != std::string::npos)
+            {
+                code << locals;
+                locals.clear();
+                before_main = false;
+            }
+        }
+    }
 
     Log::info("ShaderFilesManager", "Compiling shader: %s",
         full_path.c_str());
