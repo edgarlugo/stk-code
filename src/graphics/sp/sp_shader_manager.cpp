@@ -562,6 +562,10 @@ std::shared_ptr<SPShader> SPShaderManager::buildSPShader(const ShaderInfo& si,
                 pou->addAssignerFunction(p.first, p.second);
             }
 
+            // Drawn after the solid shaders, see SP::updateModelMatrix
+            shader->setDiscards(!pi[0].m_fragment_shader.empty() &&
+                readShaderText(pi[0].m_fragment_shader).find("discard") !=
+                std::string::npos);
             // Only the outputs the fragment shader reads
             shader->addShaderFile(keepReadOutputs(skinned ?
                 pi[0].m_skinned_mesh_shader : pi[0].m_vertex_shader,

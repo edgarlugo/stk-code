@@ -1156,8 +1156,17 @@ void updateModelMatrix()
         std::sort(sorted_dc.begin(), sorted_dc.end(),
             [](const DrawCallPair* a, const DrawCallPair* b)->bool
             {
-                return a->first->getDrawingPriority() <
-                    b->first->getDrawingPriority();
+                // At the same priority, the shaders that discard go last: a
+                // GPU that hides fragments behind the depth buffer before
+                // shading them (as the Vita's) shades every fragment of a
+                // shader that discards, even where a wall drawn later covers it
+                if (a->first->getDrawingPriority() !=
+                    b->first->getDrawingPriority())
+                {
+                    return a->first->getDrawingPriority() <
+                        b->first->getDrawingPriority();
+                }
+                return !a->first->discards() && b->first->discards();
             });
         for (unsigned dc = 0; dc < sorted_dc.size(); dc++)
         {
