@@ -824,6 +824,7 @@ if (USE_VITA)
     ${ZLIB_LIBRARY}
     ${PNG_LIBRARY}
     ${FREETYPE_LIBRARIES}
+    -lbz2
     ${HARFBUZZ_LIBRARY}
     ${OPENAL_LIBRARY}
     ${OPENSSL_LIBRARIES}
@@ -843,7 +844,7 @@ if (USE_VITA)
     -lSceHid_stub
     -Wl,--whole-archive -lSceSysmodule_stub -Wl,--no-whole-archive
     -lSceGxm_stub
-    -lSceKernelDmacmgr_stub
+    -lSceKernelDmacMgr_stub
     -lSceShaccCg_stub
     -lSceCommonDialog_stub
     -lSceAppMgr_stub
