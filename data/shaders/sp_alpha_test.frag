@@ -19,6 +19,7 @@ void main(void)
         discard;
     }
 
+#if !defined(Vita_No_Hue)
     if (hue_change > 0.0)
     {
         vec3 old_hsv = rgbToHsv(col.rgb);
@@ -26,6 +27,7 @@ void main(void)
         vec3 new_color = hsvToRgb(vec3(new_xy.x, new_xy.y, old_hsv.z));
         col = vec4(new_color.r, new_color.g, new_color.b, col.a);
     }
+#endif
     col.xyz *= color.xyz;
 
 #if defined(Advanced_Lighting_Enabled)

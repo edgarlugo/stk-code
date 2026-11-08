@@ -12,6 +12,7 @@ out vec4 o_diffuse_color;
 void main()
 {
     vec4 col = sampleTextureLayer0(uv);
+#if !defined(Vita_No_Hue)
     if (hue_change > 0.0)
     {
         float mask = col.a;
@@ -28,6 +29,7 @@ void main()
         vec3 new_color = hsvToRgb(vec3(new_xy.x, new_xy.y, old_hsv.z));
         col = vec4(new_color.r, new_color.g, new_color.b, 1.0);
     }
+#endif
 
     vec3 final_color = col.xyz * color.xyz;
     o_diffuse_color = vec4((final_color * custom_alpha), custom_alpha);

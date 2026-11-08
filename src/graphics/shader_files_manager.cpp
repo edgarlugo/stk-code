@@ -217,9 +217,17 @@ ShaderFilesManager::SharedShader ShaderFilesManager::loadShader
 #endif
     code << "#define MAX_BONES " << stk_config->m_max_skinning_bones << "\n";
 
+    // "<file>?nohue" is <file> built without its hue change code
+    std::string file_path = full_path;
+    if (file_path.size() > 6 && file_path.compare(file_path.size() - 6, 6, "?nohue") == 0)
+    {
+        file_path.resize(file_path.size() - 6);
+        code << "#define Vita_No_Hue\n";
+    }
+
     code << getHeader();
 
-    readFile(full_path, code);
+    readFile(file_path, code);
 
     Log::info("ShaderFilesManager", "Compiling shader: %s",
         full_path.c_str());

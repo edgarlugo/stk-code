@@ -82,6 +82,9 @@ class SPShader : public NoCopy, public SPPerObjectUniform
 private:
     std::string m_name;
 
+    /** Twin of this shader built without the hue change code, or NULL. */
+    SPShader* m_no_hue_shader = NULL;
+
     std::vector<std::shared_ptr<GLuint> > m_shader_files;
 
     GLuint m_program[RP_COUNT];
@@ -185,6 +188,10 @@ public:
     }
     // ------------------------------------------------------------------------
     const std::string& getName() const                       { return m_name; }
+    // ------------------------------------------------------------------------
+    SPShader* getNoHueShader() const                  { return m_no_hue_shader; }
+    // ------------------------------------------------------------------------
+    void setNoHueShader(SPShader* shader)            { m_no_hue_shader = shader; }
     // ------------------------------------------------------------------------
     SPUniformAssigner* getUniformAssigner(const std::string& name,
                                           RenderPass rp = RP_1ST) const;

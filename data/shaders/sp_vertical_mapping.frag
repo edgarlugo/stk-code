@@ -23,6 +23,7 @@ void main()
     factor = clamp(factor, 0.0, 1.0);
     col = mix(col_2, col, factor);
 
+#if !defined(Vita_No_Hue)
     if (hue_change > 0.0)
     {
         float mask = col.a;
@@ -39,6 +40,7 @@ void main()
         vec3 new_color = hsvToRgb(vec3(new_xy.x, new_xy.y, old_hsv.z));
         col = vec4(new_color.r, new_color.g, new_color.b, 1.0);
     }
+#endif
 
     vec3 final_color = col.xyz * color.xyz;
 

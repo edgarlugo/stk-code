@@ -16,6 +16,9 @@
 //  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "graphics/sp/sp_shader_manager.hpp"
+#include "utils/file_utils.hpp"
+#include <fstream>
+#include <iterator>
 #include "io/file_manager.hpp"
 #include "io/xml_node.hpp"
 #include "graphics/central_settings.hpp"
@@ -281,6 +284,36 @@ void SPShaderManager::loadEachShader(const std::string& file_name)
     {
         addSPShader(si.m_shader_name + "_skinned", buildSPShader(si, pi, ua,
             true/*skinned*/));
+    }
+
+    // Twins without the hue change code, for the fragment shaders that
+    // mark it with Vita_No_Hue: it costs the same when the hue is 0
+    if (!pi[0].m_fragment_shader.empty())
+    {
+        // Same path as ShaderFilesManager::getShaderFile
+        const std::string& f = pi[0].m_fragment_shader;
+        std::ifstream frag(FileUtils::getPortableReadingPath(
+            f.find('/') != std::string::npos || f.find('\\') != std::string::npos ?
+            f : std::string(file_manager->getFileSystem()->getAbsolutePath(
+            file_manager->getShadersDir().c_str()).c_str()) + f));
+        std::string text((std::istreambuf_iterator<char>(frag)),
+            std::istreambuf_iterator<char>());
+        if (text.find("Vita_No_Hue") != std::string::npos)
+        {
+            std::array<PassInfo, 2> pi_no_hue = pi;
+            pi_no_hue[0].m_fragment_shader += "?nohue";
+            addSPShader(si.m_shader_name + "_nohue", buildSPShader(si,
+                pi_no_hue, ua, false/*skinned*/));
+            getSPShader(si.m_shader_name)->setNoHueShader(
+                getSPShader(si.m_shader_name + "_nohue").get());
+            if (!pi[0].m_skinned_mesh_shader.empty())
+            {
+                addSPShader(si.m_shader_name + "_skinned_nohue", buildSPShader(
+                    si, pi_no_hue, ua, true/*skinned*/));
+                getSPShader(si.m_shader_name + "_skinned")->setNoHueShader(
+                    getSPShader(si.m_shader_name + "_skinned_nohue").get());
+            }
+        }
     }
 #endif
 }   // loadEachShader

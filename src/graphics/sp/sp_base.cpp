@@ -821,6 +821,12 @@ void addObject(SPMeshNode* node)
         {
             continue;
         }
+        // Without a hue change, draw with the twin built without its code
+        if (shader->getNoHueShader() && !(node->getRenderInfo(m) &&
+            node->getRenderInfo(m)->getHue() > 0.0f))
+        {
+            shader = shader->getNoHueShader();
+        }
         core::aabbox3df bb = mb->getBoundingBox();
         model_matrix.transformBoxEx(bb);
         std::vector<bool> discard;
