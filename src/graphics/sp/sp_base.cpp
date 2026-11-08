@@ -58,6 +58,9 @@
 #include <vector>
 
 #include <ge_main.hpp>
+#ifdef __vita__
+#include <mini_glm.hpp>
+#endif
 #include <ge_render_info.hpp>
 
 #include <IrrlichtDevice.h>
@@ -144,6 +147,21 @@ GLuint g_skinning_tex;
 GLuint g_skinning_buf;
 // ----------------------------------------------------------------------------
 unsigned g_skinning_size;
+#ifdef __vita__
+// ----------------------------------------------------------------------------
+/** The Vita's GPU has no 4 x 32 bit float textures, so there the skinning
+ *  texture is RGBA16F: this converts \p rows joint matrices to half floats
+ *  and uploads them from row \p y. */
+void uploadJointMatrices(int y, int rows, const float* data)
+{
+    static std::vector<short> half;
+    half.resize(rows * 16);
+    for (size_t i = 0; i < half.size(); i++)
+        half[i] = MiniGLM::toFloat16(data[i]);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, 4, rows, GL_RGBA, GL_HALF_FLOAT,
+        half.data());
+}   // uploadJointMatrices
+#endif
 // ----------------------------------------------------------------------------
 ShaderBasedRenderer* getRenderer()
 {
@@ -261,10 +279,16 @@ void resizeSkinning(unsigned number)
     if (!skinningUseTBO())
     {
         glBindTexture(GL_TEXTURE_2D, g_skinning_tex);
+#ifdef __vita__
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, number, 0, GL_RGBA,
+            GL_HALF_FLOAT, NULL);
+        uploadJointMatrices(0, 1, m.pointer());
+#else
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, number, 0, GL_RGBA,
             GL_FLOAT, NULL);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 1, GL_RGBA, GL_FLOAT,
             m.pointer());
+#endif
         glBindTexture(GL_TEXTURE_2D, 0);
         static std::vector<std::array<float, 16> >
             tmp_buf(stk_config->m_max_skinning_bones);
@@ -1188,8 +1212,12 @@ void uploadSkinningMatrices()
         if (!skinningUseTBO())
         {
             glBindTexture(GL_TEXTURE_2D, g_skinning_tex);
+#ifdef __vita__
+            uploadJointMatrices(1, buffer_offset, (const float*)g_joint_ptr);
+#else
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 1, 4, buffer_offset, GL_RGBA,
                 GL_FLOAT, g_joint_ptr);
+#endif
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
