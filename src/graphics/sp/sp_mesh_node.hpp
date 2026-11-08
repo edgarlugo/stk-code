@@ -19,6 +19,7 @@
 #define HEADER_SP_MESH_NODE_HPP
 
 #include "../../../lib/irrlicht/source/Irrlicht/CAnimatedMeshSceneNode.h"
+#include "graphics/sp/sp_instanced_data.hpp"
 #include <array>
 #include <cassert>
 #include <string>
@@ -112,6 +113,11 @@ public:
     int getTotalJoints() const;
     // ------------------------------------------------------------------------
     void setSkinningOffset(int offset)          { m_skinning_offset = offset; }
+    // ------------------------------------------------------------------------
+    // Instance data of the last transformation, see SP::addObject
+    core::matrix4 m_cached_ins_mat;
+    SPInstancedData m_cached_ins_dat;
+    bool m_cached_ins_valid = false;
     // ------------------------------------------------------------------------
     int getSkinningOffset() const                 { return m_skinning_offset; }
     // ------------------------------------------------------------------------

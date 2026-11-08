@@ -80,6 +80,21 @@ public:
         memcpy(m_data + 42, &hue_packed, 2);
     }
     // ------------------------------------------------------------------------
+    /** Replaces the per mesh buffer part of an instance. */
+    void setTextureSkinningHue(float texture_trans_x, float texture_trans_y,
+                               short skinning_offset, float hue)
+    {
+        short tm[2] =
+            {
+                short(texture_trans_x * 32767.0f),
+                short(texture_trans_y * 32767.0f)
+            };
+        memcpy(m_data + 36, tm, 4);
+        memcpy(m_data + 40, &skinning_offset, 2);
+        short hue_packed = short(core::clamp(int(hue * 100.0f), 0, 100));
+        memcpy(m_data + 42, &hue_packed, 2);
+    }
+    // ------------------------------------------------------------------------
     const void* getData() const                              { return m_data; }
 
 };

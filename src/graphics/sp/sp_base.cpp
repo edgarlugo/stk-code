@@ -115,6 +115,9 @@ std::vector<std::shared_ptr<SPDynamicDrawCall> > g_dy_dc;
 // ----------------------------------------------------------------------------
 float g_frustums[5][24] = { { } };
 // ----------------------------------------------------------------------------
+// Number of the current draw call generation, see addObject
+unsigned g_dc_frame = 0;
+// ----------------------------------------------------------------------------
 unsigned sp_solid_poly_count = 0;
 // ----------------------------------------------------------------------------
 unsigned sp_shadow_poly_count = 0;
@@ -763,6 +766,7 @@ void prepareDrawCalls()
         return;
     }
     g_bounding_boxes.clear();
+    g_dc_frame++;
     sp_wind_dir = core::vector3df(1.0f, 0.0f, 0.0f) *
         (irr_driver->getDevice()->getTimer()->getTime() / 1000.0f) * 1.5f;
     sp_solid_poly_count = sp_shadow_poly_count = 0;
@@ -829,10 +833,9 @@ void addObject(SPMeshNode* node)
         }
         core::aabbox3df bb = mb->getBoundingBox();
         model_matrix.transformBoxEx(bb);
-        std::vector<bool> discard;
+        bool discard[5] = { };
         const bool handle_shadow = node->isInShadowPass() &&
             g_handle_shadow && shader->hasShader(RP_SHADOW);
-        discard.resize((handle_shadow ? 5 : 1), false);
 
         for (int dc_type = 0; dc_type < (handle_shadow ? 5 : 1); dc_type++)
         {
@@ -902,10 +905,19 @@ void addObject(SPMeshNode* node)
 
         float hue = node->getRenderInfo(m) ?
             node->getRenderInfo(m)->getHue() : 0.0f;
-        SPInstancedData id = SPInstancedData
-            (node->getAbsoluteTransformation(), node->getTextureMatrix(m)[0],
-            node->getTextureMatrix(m)[1], hue,
-            (short)node->getSkinningOffset());
+        // Position, rotation and scale only change with the transformation of the node
+        if (!node->m_cached_ins_valid || memcmp(node->m_cached_ins_mat.pointer(),
+            model_matrix.pointer(), sizeof(float) * 16) != 0)
+        {
+            node->m_cached_ins_mat = model_matrix;
+            node->m_cached_ins_dat = SPInstancedData(model_matrix, 0.0f, 0.0f,
+                0.0f, 0);
+            node->m_cached_ins_valid = true;
+        }
+        SPInstancedData id = node->m_cached_ins_dat;
+        id.setTextureSkinningHue(node->getTextureMatrix(m)[0],
+            node->getTextureMatrix(m)[1], (short)node->getSkinningOffset(),
+            hue);
 
         for (int dc_type = 0; dc_type < (handle_shadow ? 5 : 1); dc_type++)
         {
@@ -921,16 +933,24 @@ void addObject(SPMeshNode* node)
             {
                 sp_shadow_poly_count += mb->getIndexCount() / 3;
             }
+            // Another instance of this mesh buffer added it already with this shader
+            const bool added = mb->m_dc_frame[dc_type] == g_dc_frame &&
+                mb->m_dc_shader[dc_type] == shader;
+            mb->m_dc_frame[dc_type] = g_dc_frame;
+            mb->m_dc_shader[dc_type] = shader;
             if (shader->isTransparent())
             {
                 // Transparent shader should always uses mesh samplers
                 // All transparent draw calls go DCT_TRANSPARENT
                 if (dc_type == 0)
                 {
-                    auto& ret = g_draw_calls[DCT_TRANSPARENT][shader];
-                    for (auto& p : mb->getTextureCompare())
+                    if (!added)
                     {
-                        ret[p.first].insert(mb);
+                        auto& ret = g_draw_calls[DCT_TRANSPARENT][shader];
+                        for (auto& p : mb->getTextureCompare())
+                        {
+                            ret[p.first].insert(mb);
+                        }
                     }
                     mb->addInstanceData(id, DCT_TRANSPARENT);
                 }
@@ -941,20 +961,23 @@ void addObject(SPMeshNode* node)
             }
             else
             {
-                // Check if shader for render pass uses mesh samplers
-                const RenderPass check_pass =
-                    dc_type == DCT_NORMAL ? RP_1ST : RP_SHADOW;
-                const bool sampler_less = shader->samplerLess(check_pass);
-                auto& ret = g_draw_calls[dc_type][shader];
-                if (sampler_less)
+                if (!added)
                 {
-                    ret[""].insert(mb);
-                }
-                else
-                {
-                    for (auto& p : mb->getTextureCompare())
+                    // Check if shader for render pass uses mesh samplers
+                    const RenderPass check_pass =
+                        dc_type == DCT_NORMAL ? RP_1ST : RP_SHADOW;
+                    const bool sampler_less = shader->samplerLess(check_pass);
+                    auto& ret = g_draw_calls[dc_type][shader];
+                    if (sampler_less)
                     {
-                        ret[p.first].insert(mb);
+                        ret[""].insert(mb);
+                    }
+                    else
+                    {
+                        for (auto& p : mb->getTextureCompare())
+                        {
+                            ret[p.first].insert(mb);
+                        }
                     }
                 }
                 mb->addInstanceData(id, (DrawCallType)dc_type);
@@ -973,7 +996,10 @@ void addObject(SPMeshNode* node)
                     g_glow_meshes.at(key).second.insert(mb);
                 }
             }
-            g_instances.insert(mb);
+            if (!added)
+            {
+                g_instances.insert(mb);
+            }
         }
     }
 }
@@ -999,10 +1025,9 @@ void handleDynamicDrawCall()
         SPShader* shader = dydc->getShader();
         core::aabbox3df bb = dydc->getBoundingBox();
         dydc->getAbsoluteTransformation().transformBoxEx(bb);
-        std::vector<bool> discard;
+        bool discard[5] = { };
         const bool handle_shadow =
             g_handle_shadow && shader->hasShader(RP_SHADOW);
-        discard.resize((handle_shadow ? 5 : 1), false);
         for (int dc_type = 0; dc_type < (handle_shadow ? 5 : 1); dc_type++)
         {
             for (int i = 0; i < 24; i += 4)
@@ -1121,23 +1146,22 @@ void updateModelMatrix()
         DrawCall* dc = &g_draw_calls[(DrawCallType)i];
         // Sort dc based on the drawing priority of shaders
         // The larger the drawing priority int, the last it will be drawn
-        using DrawCallPair = std::pair<SPShader*,
-            std::unordered_map<std::string,
-            std::unordered_set<SPMeshBuffer*> > >;
-        std::vector<DrawCallPair> sorted_dc;
+        // Sort pointers, not copies of the texture maps
+        using DrawCallPair = DrawCall::value_type;
+        std::vector<DrawCallPair*> sorted_dc;
         for (auto& p : *dc)
         {
-            sorted_dc.push_back(p);
+            sorted_dc.push_back(&p);
         }
         std::sort(sorted_dc.begin(), sorted_dc.end(),
-            [](const DrawCallPair& a, const DrawCallPair& b)->bool
+            [](const DrawCallPair* a, const DrawCallPair* b)->bool
             {
-                return a.first->getDrawingPriority() <
-                    b.first->getDrawingPriority();
+                return a->first->getDrawingPriority() <
+                    b->first->getDrawingPriority();
             });
         for (unsigned dc = 0; dc < sorted_dc.size(); dc++)
         {
-            auto& p = sorted_dc[dc];
+            auto& p = *sorted_dc[dc];
             g_final_draw_calls[i].emplace_back(p.first,
             std::vector<std::pair<std::array<GLuint, 6>,
                 std::vector<std::pair<SPMeshBuffer*, int> > > >());

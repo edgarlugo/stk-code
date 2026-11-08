@@ -112,6 +112,9 @@ private:
     bool initTexture();
 
 public:
+    // Frame and shader this mesh buffer was last added to the draw calls with, see SP::addObject
+    unsigned m_dc_frame[DCT_FOR_VAO] = {};
+    SPShader* m_dc_shader[DCT_FOR_VAO] = {};
     SPMeshBuffer()
     {
 #ifdef _DEBUG
