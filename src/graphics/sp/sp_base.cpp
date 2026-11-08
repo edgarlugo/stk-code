@@ -1,16 +1,13 @@
 //  SuperTuxKart - a fun racing game with go-kart
 //  Copyright (C) 2018 SuperTuxKart-Team
-//
 //  This program is free software; you can redistribute it and/or
 //  modify it under the terms of the GNU General Public License
 //  as published by the Free Software Foundation; either version 3
 //  of the License, or (at your option) any later version.
-//
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
@@ -117,6 +114,36 @@ float g_frustums[5][24] = { { } };
 // ----------------------------------------------------------------------------
 // Number of the current draw call generation, see addObject
 unsigned g_dc_frame = 0;
+// ----------------------------------------------------------------------------
+/** The draw call sets a mesh buffer goes in with a shader, kept in
+ *  the mesh buffer while its shader and textures stay the same: the maps of
+ *  g_draw_calls are kept between frames. */
+static const std::vector<std::unordered_set<SPMeshBuffer*>*>&
+    getDrawCallSets(SPMeshBuffer* mb, DrawCallType dct, SPShader* shader,
+                    bool sampler_less)
+{
+    std::vector<std::unordered_set<SPMeshBuffer*>*>& sets = mb->m_dc_sets[dct];
+    if (mb->m_dc_sets_shader[dct] != shader ||
+        mb->m_dc_sets_sampler_less[dct] != sampler_less)
+    {
+        sets.clear();
+        auto& ret = g_draw_calls[dct][shader];
+        if (sampler_less)
+        {
+            sets.push_back(&ret[""]);
+        }
+        else
+        {
+            for (auto& p : mb->getTextureCompare())
+            {
+                sets.push_back(&ret[p.first]);
+            }
+        }
+        mb->m_dc_sets_shader[dct] = shader;
+        mb->m_dc_sets_sampler_less[dct] = sampler_less;
+    }
+    return sets;
+}   // getDrawCallSets
 // ----------------------------------------------------------------------------
 unsigned sp_solid_poly_count = 0;
 // ----------------------------------------------------------------------------
@@ -790,9 +817,16 @@ void prepareDrawCalls()
             g_stk_sbr->getShadowMatrices()->getSunOrthoMatrices()[3]);
     }
 
+    // The maps stay, mesh buffers keep pointers to their sets
     for (auto& p : g_draw_calls)
     {
-        p.clear();
+        for (auto& q : p)
+        {
+            for (auto& r : q.second)
+            {
+                r.second.clear();
+            }
+        }
     }
     for (auto& p : g_final_draw_calls)
     {
@@ -946,10 +980,10 @@ void addObject(SPMeshNode* node)
                 {
                     if (!added)
                     {
-                        auto& ret = g_draw_calls[DCT_TRANSPARENT][shader];
-                        for (auto& p : mb->getTextureCompare())
+                        for (auto* set : getDrawCallSets(mb, DCT_TRANSPARENT,
+                            shader, false))
                         {
-                            ret[p.first].insert(mb);
+                            set->insert(mb);
                         }
                     }
                     mb->addInstanceData(id, DCT_TRANSPARENT);
@@ -967,17 +1001,10 @@ void addObject(SPMeshNode* node)
                     const RenderPass check_pass =
                         dc_type == DCT_NORMAL ? RP_1ST : RP_SHADOW;
                     const bool sampler_less = shader->samplerLess(check_pass);
-                    auto& ret = g_draw_calls[dc_type][shader];
-                    if (sampler_less)
+                    for (auto* set : getDrawCallSets(mb,
+                        (DrawCallType)dc_type, shader, sampler_less))
                     {
-                        ret[""].insert(mb);
-                    }
-                    else
-                    {
-                        for (auto& p : mb->getTextureCompare())
-                        {
-                            ret[p.first].insert(mb);
-                        }
+                        set->insert(mb);
                     }
                 }
                 mb->addInstanceData(id, (DrawCallType)dc_type);
@@ -1151,7 +1178,20 @@ void updateModelMatrix()
         std::vector<DrawCallPair*> sorted_dc;
         for (auto& p : *dc)
         {
-            sorted_dc.push_back(&p);
+            // The maps keep the shaders of earlier frames
+            bool used = false;
+            for (auto& q : p.second)
+            {
+                if (!q.second.empty())
+                {
+                    used = true;
+                    break;
+                }
+            }
+            if (used)
+            {
+                sorted_dc.push_back(&p);
+            }
         }
         std::sort(sorted_dc.begin(), sorted_dc.end(),
             [](const DrawCallPair* a, const DrawCallPair* b)->bool

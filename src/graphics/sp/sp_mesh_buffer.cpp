@@ -126,6 +126,9 @@ void SPMeshBuffer::uploadGLMesh()
     }
 
     m_textures.resize(m_stk_material.size());
+    // The draw call sets depend on the textures
+    for (SPShader*& shader : m_dc_sets_shader)
+        shader = NULL;
     for (unsigned i = 0; i < m_stk_material.size(); i++)
     {
         for (unsigned j = 0; j < 6; j++)
@@ -478,6 +481,9 @@ void SPMeshBuffer::reloadTextureCompare()
 {
     assert(!m_textures.empty());
     m_tex_cmp.clear();
+    // The draw call sets depend on the textures
+    for (SPShader*& shader : m_dc_sets_shader)
+        shader = NULL;
     for (unsigned i = 0; i < m_stk_material.size(); i++)
     {
         const std::string name =

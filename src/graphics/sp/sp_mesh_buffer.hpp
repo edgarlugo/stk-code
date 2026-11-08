@@ -36,6 +36,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+#include <unordered_set>
 
 using namespace irr;
 using namespace scene;
@@ -115,6 +116,10 @@ public:
     // Frame and shader this mesh buffer was last added to the draw calls with, see SP::addObject
     unsigned m_dc_frame[DCT_FOR_VAO] = {};
     SPShader* m_dc_shader[DCT_FOR_VAO] = {};
+    // The draw call sets this mesh buffer goes in with a shader, see SP::addObject
+    SPShader* m_dc_sets_shader[DCT_FOR_VAO] = {};
+    bool m_dc_sets_sampler_less[DCT_FOR_VAO] = {};
+    std::vector<std::unordered_set<SPMeshBuffer*>*> m_dc_sets[DCT_FOR_VAO];
     SPMeshBuffer()
     {
 #ifdef _DEBUG
