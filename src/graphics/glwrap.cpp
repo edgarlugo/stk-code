@@ -191,7 +191,8 @@ ScopedGPUTimer::ScopedGPUTimer(GPUTimer &t) : timer(t)
     if (!UserConfigParams::m_profiler_enabled) return;
     if (profiler.isFrozen()) return;
     if (!timer.canSubmitQuery) return;
-#ifdef GL_TIME_ELAPSED
+    // vitaGL has no timer queries
+#if defined(GL_TIME_ELAPSED) && !defined(__vita__)
     if (!timer.initialised)
     {
         glGenQueries(1, &timer.query);
@@ -215,7 +216,7 @@ ScopedGPUTimer::~ScopedGPUTimer()
     if (!UserConfigParams::m_profiler_enabled) return;
     if (profiler.isFrozen()) return;
     if (!timer.canSubmitQuery) return;
-#ifdef GL_TIME_ELAPSED
+#if defined(GL_TIME_ELAPSED) && !defined(__vita__)
     glEndQuery(GL_TIME_ELAPSED);
     timer.canSubmitQuery = false;
 #endif

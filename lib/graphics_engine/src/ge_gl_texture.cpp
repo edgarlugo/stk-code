@@ -73,6 +73,11 @@ GEGLTexture::GEGLTexture(const std::string& name, unsigned int size,
             GE::hasGLExtension("GL_ARB_texture_swizzle");
     }
 
+#ifdef __vita__
+    // With the GL 3 context of the shader-based renderer, GL_ALPHA textures
+    // give the swizzle, see upload()
+    texture_swizzle = irr::video::useCoreContext;
+#endif
     if (single_channel && texture_swizzle)
         m_single_channel = true;
     std::vector<uint8_t> data;
@@ -122,6 +127,9 @@ void GEGLTexture::upload(uint8_t* data)
 #ifdef __vita__
 	if (!m_single_channel && (m_texture_name < 0x41 || m_texture_name > 0x43))
 		internal_format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+	// vitaGL samples GL_ALPHA textures as (1, 1, 1, A), what the swizzle below asks for
+	if (m_single_channel)
+		format = internal_format = GL_ALPHA;
 #else
     if (m_driver_type == video::EDT_OGLES2)
     {
@@ -137,10 +145,12 @@ void GEGLTexture::upload(uint8_t* data)
     if (m_single_channel)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+#ifndef __vita__
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ONE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_ONE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_ONE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+#endif
     }
     glTexImage2D(GL_TEXTURE_2D, 0, internal_format, w, h, 0, format,
         GL_UNSIGNED_BYTE, data);

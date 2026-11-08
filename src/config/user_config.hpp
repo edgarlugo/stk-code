@@ -670,6 +670,13 @@ namespace UserConfigParams
     PARAM_PREFIX BoolUserConfigParam        m_force_legacy_device
         PARAM_DEFAULT(BoolUserConfigParam(false, "force_legacy_device",
         &m_video_group, "Force OpenGL 2 context, even if OpenGL 3 is available."));
+#ifdef __vita__
+    PARAM_PREFIX BoolUserConfigParam        m_vita_shader_renderer
+        PARAM_DEFAULT(BoolUserConfigParam(false, "vita_shader_renderer",
+        &m_video_group, "Use the shader-based renderer (OpenGL 3) of the PC "
+        "version instead of the legacy one. Looks closer to the PC version "
+        "but is slower. Read when the game starts."));
+#endif
     PARAM_PREFIX BoolUserConfigParam        m_split_screen_horizontally
         PARAM_DEFAULT(BoolUserConfigParam(true, "split_screen_horizontally",
             &m_video_group, "When playing a non-square amount of players (e.g. 2),"

@@ -86,6 +86,17 @@ void CentralVideoSettings::init()
 
         glGetIntegerv(GL_MAJOR_VERSION, &m_gl_major_version);
         glGetIntegerv(GL_MINOR_VERSION, &m_gl_minor_version);
+#ifdef __vita__
+        // vitaGL reports GL ES 2.0, but it translates GLSL ES 3.00 and has
+        // what the shader-based renderer needs from GL ES 3.0 (or
+        // CIrrDeviceSDL gives fallbacks for it)
+        if (UserConfigParams::m_vita_shader_renderer &&
+            !UserConfigParams::m_force_legacy_device)
+        {
+            m_gl_major_version = 3;
+            m_gl_minor_version = 0;
+        }
+#endif
         const char *vendor = (const char *)glGetString(GL_VENDOR);
         const char *renderer = (const char *)glGetString(GL_RENDERER);
         const char *version = (const char *)glGetString(GL_VERSION);

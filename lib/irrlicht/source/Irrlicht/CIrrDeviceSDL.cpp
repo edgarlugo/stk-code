@@ -325,6 +325,104 @@ bool CIrrDeviceSDL::isGyroscopeAvailable()
 }
 
 
+#ifdef __vita__
+// Fallbacks for the GL ES 3.0 entry points vitaGL lacks
+static void vitaDetachShader(GLuint, GLuint)
+{
+	// Shaders stay attached: glDeleteShader then only marks them, the linked program still uses them
+}
+static GLsync vitaFenceSync(GLenum, GLbitfield)
+{
+	// vitaGL keeps the buffers the GPU still reads (glBufferSubData, glMapBufferRange with invalidation)
+	return (GLsync)1;
+}
+static GLenum vitaClientWaitSync(GLsync, GLbitfield, GLuint64)
+{
+	return GL_ALREADY_SIGNALED;
+}
+static void vitaDeleteSync(GLsync) {}
+static void vitaDrawBuffers(GLsizei, const GLenum*) {}
+static void vitaClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat* value)
+{
+	if (buffer == GL_COLOR && drawbuffer == 0)
+	{
+		glClearColor(value[0], value[1], value[2], value[3]);
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
+	else if (buffer == GL_DEPTH)
+	{
+		glClearDepthf(value[0]);
+		glClear(GL_DEPTH_BUFFER_BIT);
+	}
+}
+static void vitaClearBufferfi(GLenum, GLint, GLfloat depth, GLint stencil)
+{
+	glClearDepthf(depth);
+	glClearStencil(stencil);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+}
+static void vitaBlendColor(GLfloat, GLfloat, GLfloat, GLfloat) {}
+static void vitaFramebufferTextureLayer(GLenum, GLenum, GLuint, GLint, GLint) {}
+static void vitaGetShaderPrecisionFormat(GLenum, GLenum, GLint* range, GLint* precision)
+{
+	range[0] = 127;
+	range[1] = 127;
+	*precision = 23;
+}
+static void vitaGetUniformfv(GLuint, GLint, GLfloat* params)
+{
+	params[0] = 0.0f;
+}
+static void vitaGetUniformiv(GLuint, GLint, GLint* params)
+{
+	params[0] = 0;
+}
+static void vitaTransformFeedbackVaryings(GLuint, GLsizei, const GLchar* const*, GLenum) {}
+static void vitaVertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w)
+{
+	glVertexAttrib4f(index, (GLfloat)x, (GLfloat)y, (GLfloat)z, (GLfloat)w);
+}
+static void vitaVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+	glVertexAttribPointer(index, size, type, GL_FALSE, stride, pointer);
+}
+static void vitaTexImage3D(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) {}
+static void vitaTexStorage2D(GLenum target, GLsizei levels, GLenum internal_format, GLsizei width, GLsizei height)
+{
+	for (GLsizei i = 0; i < levels; i++)
+	{
+		glTexImage2D(target, i, internal_format, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		width = width > 1 ? width / 2 : 1;
+		height = height > 1 ? height / 2 : 1;
+	}
+}
+static void vitaTexStorage3D(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei) {}
+
+static void vitaFillGL3()
+{
+#define VITA_FILL(name) if (!glad_gl##name) glad_gl##name = vita##name
+	VITA_FILL(DetachShader);
+	VITA_FILL(FenceSync);
+	VITA_FILL(ClientWaitSync);
+	VITA_FILL(DeleteSync);
+	VITA_FILL(DrawBuffers);
+	VITA_FILL(ClearBufferfv);
+	VITA_FILL(ClearBufferfi);
+	VITA_FILL(BlendColor);
+	VITA_FILL(FramebufferTextureLayer);
+	VITA_FILL(GetShaderPrecisionFormat);
+	VITA_FILL(GetUniformfv);
+	VITA_FILL(GetUniformiv);
+	VITA_FILL(TransformFeedbackVaryings);
+	VITA_FILL(VertexAttribI4i);
+	VITA_FILL(VertexAttribIPointer);
+	VITA_FILL(TexImage3D);
+	VITA_FILL(TexStorage2D);
+	VITA_FILL(TexStorage3D);
+#undef VITA_FILL
+}
+#endif
+
 bool versionCorrect(int major, int minor)
 {
 #ifdef _IRR_COMPILE_WITH_OGLES2_
@@ -513,7 +611,6 @@ void CIrrDeviceSDL::tryCreateOpenGLContext(u32 flags)
 start:
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, CreationParams.Doublebuffer);
 	irr::video::useCoreContext = true;
-	CreationParams.ForceLegacyDevice = true;
 
 	if (GLContextDebugBit)
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
@@ -549,7 +646,13 @@ start:
 	{
 		Context = SDL_GL_CreateContext(Window);
 		if (Context && gladLoadGLES2((GLADloadfunc)SDL_GL_GetProcAddress) != 0 &&
-			versionCorrect(3, 0)) return;
+			versionCorrect(3, 0))
+		{
+#ifdef __vita__
+			vitaFillGL3();
+#endif
+			return;
+		}
 	}
 
 #else

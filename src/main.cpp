@@ -2350,11 +2350,34 @@ int main(int argc, char *argv[]) {
 
 	return sceKernelExitDeleteThread(0);
 }
+// True if vita_shader_renderer is set in the user config, read before the
+// user config is loaded because vitaGL needs to know it when initialized
+static bool vitaShaderRendererChosen()
+{
+	FILE* f = fopen("ux0:data/supertuxkart/config-0.10/config.xml", "r");
+	if (f == NULL)
+		return false;
+	bool chosen = false;
+	char line[512];
+	while (fgets(line, sizeof(line), f))
+	{
+		if (strstr(line, "vita_shader_renderer=\"true\""))
+		{
+			chosen = true;
+			break;
+		}
+	}
+	fclose(f);
+	return chosen;
+}
 void *real_main(char *argv[]) {
 	vglSetParamBufferSize(6 * 1024 * 1024);
 	vglSetCircularPoolSize(30 * 1024 * 1024);
+	// The shader-based renderer needs more RAM left to the system: without
+	// it sceGxmCreateRenderTarget fails to make the minimap's framebuffer
+	const int ram_threshold = (vitaShaderRendererChosen() ? 20 : 12) * 1024 * 1024;
 	// 4x MSAA costs ~6 ms of GPU per frame in the heavy tracks, 2x looks almost the same
-	vglInitWithCustomThreshold(0, 960, 544, 12 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_2X);
+	vglInitWithCustomThreshold(0, 960, 544, ram_threshold, 0, 0, 0, SCE_GXM_MULTISAMPLE_2X);
 	vglSetDisplayCallback(vitaDrawFPS);
 	int argc = 0;
 #else

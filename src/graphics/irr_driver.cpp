@@ -508,6 +508,11 @@ void IrrDriver::initDevice()
 
         params.ForceLegacyDevice = (UserConfigParams::m_force_legacy_device ||
             UserConfigParams::m_gamepad_visualisation);
+#ifdef __vita__
+        // The legacy renderer unless the shader-based one is chosen
+        params.ForceLegacyDevice = params.ForceLegacyDevice ||
+            !UserConfigParams::m_vita_shader_renderer;
+#endif
 
 begin:
 #if !defined(SERVER_ONLY)

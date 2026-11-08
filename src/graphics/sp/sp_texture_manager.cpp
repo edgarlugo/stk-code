@@ -33,7 +33,12 @@ SPTextureManager* SPTextureManager::m_sptm = NULL;
 // ----------------------------------------------------------------------------
 SPTextureManager::SPTextureManager()
                 : m_max_threaded_load_obj
+#ifdef __vita__
+                  // Every thread gets a 2 MB stack (see main.cpp)
+                  (1),
+#else
                   ((unsigned)std::thread::hardware_concurrency()),
+#endif
                   m_gl_cmd_function_count(0)
 {
     if (!CVS->isGLSL())
