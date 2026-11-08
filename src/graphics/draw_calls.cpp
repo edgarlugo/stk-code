@@ -33,6 +33,22 @@
 #include "graphics/sp/sp_mesh_node.hpp"
 #include "tracks/track.hpp"
 #include "utils/profiler.hpp"
+#include "utils/vita_jobs.hpp"
+
+// The scene walk on several cores (see VitaJobs): the children of the root
+// are split in chunks walked on all cores, each recording what it found, in
+// order: 0 mesh node, 1 particles, 2 billboard, 3 text billboard.
+struct WalkFound
+{
+    void* m_node;
+    int   m_kind;
+};
+static const int WALK_CHUNKS = 24;
+static core::array<scene::ISceneNode*> g_walk_chunk[WALK_CHUNKS];
+static std::vector<WalkFound> g_walk_found_chunk[WALK_CHUNKS];
+static const scene::ICameraSceneNode* g_walk_cam = NULL;
+/** Where the walk on this thread records what it finds, NULL to add it. */
+static thread_local std::vector<WalkFound>* g_walk_found = NULL;
 
 #include <numeric>
 
@@ -241,8 +257,8 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
             node->animateDrawnLevel();
 
             // One child array per LOD depth, reused every frame
-            static core::array<scene::ISceneNode*> lod_child[8];
-            static unsigned lod_depth = 0;
+            static thread_local core::array<scene::ISceneNode*> lod_child[8];
+            static thread_local unsigned lod_depth = 0;
             core::array<scene::ISceneNode*> deep_child;
             core::array<scene::ISceneNode*>& child =
                 lod_depth < 8 ? lod_child[lod_depth] : deep_child;
@@ -263,14 +279,22 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
         else if (type == ESNT_ANIMATED_MESH)
         {
             SP::SPMeshNode* node = static_cast<SP::SPMeshNode*>(List[i]);
-            SP::addObject(node);
+            if (g_walk_found)
+                g_walk_found->push_back({ node, 0 });
+            else
+                SP::addObject(node);
         }
         else if (STKParticle *node = type != ESNT_PARTICLE_SYSTEM ? NULL :
             dynamic_cast<STKParticle*>(List[i]))
         {
             node->updateAbsolutePosition();
             if (!isCulledPrecise(cam, List[i], irr_driver->getBoundingBoxesViz()))
-                CPUParticleManager::getInstance()->addParticleNode(node);
+            {
+                if (g_walk_found)
+                    g_walk_found->push_back({ node, 1 });
+                else
+                    CPUParticleManager::getInstance()->addParticleNode(node);
+            }
             continue;
         }
         else if (scene::IBillboardSceneNode *node =
@@ -279,7 +303,12 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
         {
             node->updateAbsolutePosition();
             if (!isCulledPrecise(cam, List[i]))
-                CPUParticleManager::getInstance()->addBillboardNode(node);
+            {
+                if (g_walk_found)
+                    g_walk_found->push_back({ node, 2 });
+                else
+                    CPUParticleManager::getInstance()->addBillboardNode(node);
+            }
             continue;
         }
         else if (STKTextBillboard *tb = type != ESNT_UNKNOWN ? NULL :
@@ -287,12 +316,27 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
         {
             tb->updateAbsolutePosition();
             if (!isCulledPrecise(cam, List[i], irr_driver->getBoundingBoxesViz()))
-                TextBillboardDrawer::addTextBillboard(tb);
+            {
+                if (g_walk_found)
+                    g_walk_found->push_back({ tb, 3 });
+                else
+                    TextBillboardDrawer::addTextBillboard(tb);
+            }
             continue;
         }
         parseSceneManager(List[i]->getChildren(), cam);
     }
 }
+
+// ----------------------------------------------------------------------------
+/** Walks one chunk of the root's children, recording what it finds. */
+void DrawCalls::parseChunk(void* draw_calls, int chunk)
+{
+    g_walk_found = &g_walk_found_chunk[chunk];
+    static_cast<DrawCalls*>(draw_calls)->parseSceneManager(g_walk_chunk[chunk],
+                                                           g_walk_cam);
+    g_walk_found = NULL;
+}   // parseChunk
 
 // ----------------------------------------------------------------------------
 DrawCalls::DrawCalls()
@@ -319,9 +363,48 @@ void DrawCalls::prepareDrawCalls(scene::ICameraSceneNode *camnode)
     TextBillboardDrawer::reset();
     PROFILER_PUSH_CPU_MARKER("- culling", 0xFF, 0xFF, 0x0);
     SP::prepareDrawCalls();
-    parseSceneManager(
-        irr_driver->getSceneManager()->getRootSceneNode()->getChildren(),
-        camnode);
+    // The walk only reads the scene graph and updates the LOD nodes it meets,
+    // each inside its own subtree. What it finds is added on the main thread
+    // in the order of a single walk: SP::addObject (draw call maps, GL
+    // uploads) only touches the found nodes and their mesh buffers.
+    core::array<scene::ISceneNode*>& root =
+        irr_driver->getSceneManager()->getRootSceneNode()->getChildren();
+    if (root.size() >= (unsigned)WALK_CHUNKS && VitaJobs::isEnabled())
+    {
+        for (int c = 0; c < WALK_CHUNKS; c++)
+        {
+            g_walk_chunk[c].set_used(0);
+            g_walk_found_chunk[c].clear();
+        }
+        for (unsigned i = 0; i < root.size(); i++)
+            g_walk_chunk[i * WALK_CHUNKS / root.size()].push_back(root[i]);
+        g_walk_cam = camnode;
+        // Each chunk is added as soon as it is walked, while the other
+        // cores walk the next ones
+        const unsigned int batch =
+            VitaJobs::start(parseChunk, this, WALK_CHUNKS);
+        for (int c = 0; c < WALK_CHUNKS; c++)
+        {
+            VitaJobs::wait(batch, c);
+            for (const WalkFound& f : g_walk_found_chunk[c])
+            {
+                if (f.m_kind == 0)
+                    SP::addObject(static_cast<SP::SPMeshNode*>(f.m_node));
+                else if (f.m_kind == 1)
+                    CPUParticleManager::getInstance()->addParticleNode(
+                        static_cast<STKParticle*>(f.m_node));
+                else if (f.m_kind == 2)
+                    CPUParticleManager::getInstance()->addBillboardNode(
+                        static_cast<scene::IBillboardSceneNode*>(f.m_node));
+                else
+                    TextBillboardDrawer::addTextBillboard(
+                        static_cast<STKTextBillboard*>(f.m_node));
+            }
+        }
+        VitaJobs::finish();
+    }
+    else
+        parseSceneManager(root, camnode);
     SP::handleDynamicDrawCall();
     SP::updateModelMatrix();
     PROFILER_POP_CPU_MARKER();

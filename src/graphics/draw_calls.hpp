@@ -46,6 +46,8 @@ private:
 
     void parseSceneManager(core::array<scene::ISceneNode*> &List,
                            const scene::ICameraSceneNode *cam);
+    // A chunk of the scene walk on a VitaJobs thread
+    static void parseChunk(void* draw_calls, int chunk);
 
     bool isCulledPrecise(const scene::ICameraSceneNode *cam,
                          const scene::ISceneNode* node,
