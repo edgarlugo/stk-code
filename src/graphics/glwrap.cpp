@@ -45,6 +45,11 @@
 #if defined(USE_GLES2)
 #ifndef __APPLE__
 #include <SDL_video.h>
+#ifdef __vita__
+// The EGL extensions of the VitaSDK use GXM and display types
+#include <psp2/gxm.h>
+#include <psp2/display.h>
+#endif
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #endif
