@@ -1,3 +1,64 @@
+# SuperTuxKart for PlayStation Vita
+
+This is a port of SuperTuxKart 1.5 to the PlayStation Vita, based on the port by
+[Rinnegatamante](https://github.com/Rinnegatamante/stk-code). It renders with
+[vitaGL](https://github.com/Rinnegatamante/vitaGL) and spreads the physics and
+the scene work over the three cores of the Vita.
+
+All the game modes work offline: races, time trials, follow the leader, battles
+(3 strikes and free-for-all), soccer and egg hunts. Capture the flag is network
+only in SuperTuxKart. With 6 karts most tracks run at about 60 FPS; the heaviest
+(Black Forest, Cocoa Temple, Candela City) at 53-58.
+
+## Renderers
+
+- **Legacy** (default): irrlicht's fixed pipeline over OpenGL ES 2, the fastest.
+- **Shader-based**: the OpenGL 3 renderer of the PC version (without the
+  advanced lighting), closer to how the game looks on PC but slower on the
+  heaviest tracks. Turn it on by setting `vita_shader_renderer="true"` in the
+  `<Video` section of `ux0:data/supertuxkart/config-0.10/config.xml`; it is
+  read when the game starts.
+
+## Installing
+
+1. Install the VPK (title ID `STKV00001`).
+2. Copy the game data to `ux0:data/supertuxkart/stk-data/`: the `assets/data`
+   folder of the official Android package (`SuperTuxKart-1.5.apk` from the
+   [1.5 release](https://github.com/supertuxkart/stk-code/releases/tag/1.5)),
+   then the `data` folder of this repository over it, replacing the files that
+   are in both.
+
+The game keeps its config and saves in `ux0:data/supertuxkart/`.
+
+## Building
+
+You need the [VitaSDK](https://vitasdk.org) (the `vitasdk/vitasdk` Docker
+image works) with the `openssl` package instead of `openssl-1.1.1`, and vitaGL
+from the `stk-port` branch of
+[edgarlugo/vitaGL](https://github.com/edgarlugo/vitaGL/tree/stk-port), which
+has the fixes this port needs and the GLSL ES 3.00 support of the shader-based
+renderer:
+
+```sh
+vdpm pacman -- -Rdd --noconfirm openssl-1.1.1
+vdpm pacman -- -S --noconfirm vita/openssl
+git clone -b stk-port https://github.com/edgarlugo/vitaGL
+make -C vitaGL HAVE_SHADER_CACHE=1 HAVE_GLSL_UBOS=1 HAVE_GLSL_TEXTURE_SIZE=1 install
+```
+
+Then build the game:
+
+```sh
+cmake -S . -B build -DUSE_VITA=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+`build/supertuxkart.vpk` is the VPK and `build/eboot.bin` the executable alone.
+
+The rest of this file is the README of SuperTuxKart.
+
+---
+
 # SuperTuxKart
 [![Linux build status](https://github.com/supertuxkart/stk-code/actions/workflows/linux.yml/badge.svg)](https://github.com/supertuxkart/stk-code/actions/workflows/linux.yml)
 [![Apple build status](https://github.com/supertuxkart/stk-code/actions/workflows/apple.yml/badge.svg)](https://github.com/supertuxkart/stk-code/actions/workflows/apple.yml)
