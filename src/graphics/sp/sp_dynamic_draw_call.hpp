@@ -61,6 +61,22 @@ private:
 
     // ------------------------------------------------------------------------
     bool initTextureDyDc();
+#ifdef __vita__
+    // ------------------------------------------------------------------------
+    /** Uploads the vertices from \p first on with their normals and tangents
+     *  converted by toGLVertexNormal. */
+    void uploadVertices(unsigned first)
+    {
+        std::vector<video::S3DVertexSkinnedMesh> v(m_vertices.begin() + first,
+            m_vertices.end());
+        for (video::S3DVertexSkinnedMesh& vertex : v)
+        {
+            vertex.m_normal = toGLVertexNormal(vertex.m_normal);
+            vertex.m_tangent = toGLVertexNormal(vertex.m_tangent);
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, first * 48, v.size() * 48, v.data());
+    }
+#endif
 
 public:
     SPDynamicDrawCall(scene::E_PRIMITIVE_TYPE pt,
@@ -107,16 +123,26 @@ public:
                 m_update_offset = 0;
                 m_gl_vbo_size = new_size;
                 m_vertices.reserve(m_gl_vbo_size);
+#ifdef __vita__
+                glBufferData(GL_ARRAY_BUFFER, m_gl_vbo_size * 48, NULL,
+                    GL_DYNAMIC_DRAW);
+                uploadVertices(0);
+#else
                 glBufferData(GL_ARRAY_BUFFER, m_gl_vbo_size * 48,
                     m_vertices.data(), GL_DYNAMIC_DRAW);
+#endif
             }
             else
             {
                 const int length =
                     ((int)m_vertices.size() - m_update_offset) * 48;
                 assert(length > 0);
+#ifdef __vita__
+                uploadVertices(m_update_offset);
+#else
                 glBufferSubData(GL_ARRAY_BUFFER, m_update_offset * 48, length,
                     m_vertices.data() + m_update_offset);
+#endif
             }
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             m_update_offset = -1;

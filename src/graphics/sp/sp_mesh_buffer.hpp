@@ -27,8 +27,11 @@
 #include <IMeshBuffer.h>
 #include <S3DVertex.h>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -43,6 +46,28 @@ namespace SP
 {
 class SPShader;
 class SPTexture;
+
+// ----------------------------------------------------------------------------
+/** Normals and tangents are packed as 10-10-10-2 signed vectors, a vertex
+ *  format the GPU of the PS Vita doesn't have: there they are uploaded as 4
+ *  signed normalized bytes. Elsewhere the vector is returned as it is. */
+inline uint32_t toGLVertexNormal(uint32_t v)
+{
+#ifdef __vita__
+    const int c[4] = { (int32_t)(v << 22) >> 22, (int32_t)(v << 12) >> 22,
+        (int32_t)(v << 2) >> 22, (int32_t)v >> 30 };
+    const float scale[4] = { 511.0f, 511.0f, 511.0f, 1.0f };
+    uint32_t out = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        const float f = std::max((float)c[i] / scale[i], -1.0f);
+        out |= (uint32_t)(uint8_t)(int8_t)lroundf(f * 127.0f) << (i * 8);
+    }
+    return out;
+#else
+    return v;
+#endif
+}   // toGLVertexNormal
 
 class SPMeshBuffer : public IMeshBuffer, public SPPerObjectUniform
 {

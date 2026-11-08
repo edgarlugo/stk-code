@@ -170,7 +170,8 @@ void SPMeshBuffer::uploadGLMesh()
             memcpy(ptr + v_size + offset, &m_vertices[i].m_position.X, 12);
             offset += 12;
     
-            memcpy(ptr + v_size + offset, &m_vertices[i].m_normal, 12);
+            const uint32_t normal = toGLVertexNormal(m_vertices[i].m_normal);
+            memcpy(ptr + v_size + offset, &normal, 4);
             offset += 4;
     
             video::SColor vc = m_vertices[i].m_color;
@@ -192,7 +193,9 @@ void SPMeshBuffer::uploadGLMesh()
             }
             if (use_tangents)
             {
-                memcpy(ptr + v_size + offset, &m_vertices[i].m_tangent, 4);
+                const uint32_t tangent =
+                    toGLVertexNormal(m_vertices[i].m_tangent);
+                memcpy(ptr + v_size + offset, &tangent, 4);
                 offset += 4;
             }
             if (m_skinned)
@@ -285,10 +288,14 @@ void SPMeshBuffer::recreateVAO(unsigned i)
     // Normal, if 10bit vector normalization is wrongly done by drivers, use
     // original value and normalize ourselves in shader
     glEnableVertexAttribArray(1);
+#ifdef __vita__
+    glVertexAttribPointer(1, 4, GL_BYTE, GL_TRUE, pitch, (void*)offset);
+#else
     glVertexAttribPointer(1, 4, GL_INT_2_10_10_10_REV,
         GraphicsRestrictions::isDisabled
         (GraphicsRestrictions::GR_CORRECT_10BIT_NORMALIZATION) ?
         GL_FALSE : GL_TRUE, pitch, (void*)offset);
+#endif
     offset += 4;
 
     // Vertex color
@@ -318,10 +325,14 @@ void SPMeshBuffer::recreateVAO(unsigned i)
     {
         // Tangent and bi-tanget sign
         glEnableVertexAttribArray(5);
+#ifdef __vita__
+        glVertexAttribPointer(5, 4, GL_BYTE, GL_TRUE, pitch, (void*)offset);
+#else
         glVertexAttribPointer(5, 4, GL_INT_2_10_10_10_REV,
             GraphicsRestrictions::isDisabled
             (GraphicsRestrictions::GR_CORRECT_10BIT_NORMALIZATION) ?
             GL_FALSE : GL_TRUE, pitch, (void*)offset);
+#endif
             offset += 4;
     }
     else

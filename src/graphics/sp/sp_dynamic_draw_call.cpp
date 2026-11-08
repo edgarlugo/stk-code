@@ -77,10 +77,15 @@ SPDynamicDrawCall::SPDynamicDrawCall(scene::E_PRIMITIVE_TYPE pt,
     // Normal, if 10bit vector normalization is wrongly done by drivers, use
     // original value and normalize ourselves in shader
     glEnableVertexAttribArray(1);
+#ifdef __vita__
+    // 4 signed bytes, see toGLVertexNormal
+    glVertexAttribPointer(1, 4, GL_BYTE, GL_TRUE, 48, (void*)offset);
+#else
     glVertexAttribPointer(1, 4, GL_INT_2_10_10_10_REV,
         GraphicsRestrictions::isDisabled
         (GraphicsRestrictions::GR_CORRECT_10BIT_NORMALIZATION) ?
         GL_FALSE : GL_TRUE, 48, (void*)offset);
+#endif
     offset += 4;
 
     // Vertex color
@@ -101,10 +106,14 @@ SPDynamicDrawCall::SPDynamicDrawCall(scene::E_PRIMITIVE_TYPE pt,
 
     // Tangent and bi-tanget sign
     glEnableVertexAttribArray(5);
+#ifdef __vita__
+    glVertexAttribPointer(5, 4, GL_BYTE, GL_TRUE, 48, (void*)offset);
+#else
     glVertexAttribPointer(5, 4, GL_INT_2_10_10_10_REV,
         GraphicsRestrictions::isDisabled
         (GraphicsRestrictions::GR_CORRECT_10BIT_NORMALIZATION) ?
         GL_FALSE : GL_TRUE, 48, (void*)offset);
+#endif
         offset += 4;
 
     // 4 Joint indices
