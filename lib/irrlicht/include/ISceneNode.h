@@ -54,7 +54,8 @@ namespace scene
 				Parent(0), SceneManager(mgr), TriangleSelector(0), ID(id),
 				AutomaticCullingState(EAC_BOX), DebugDataVisible(EDS_OFF),
 				IsVisible(true), IsDebugObject(false),
-				NeedsUpdateAbsTrans(true), UpdatedAbsTrans(false)
+				NeedsUpdateAbsTrans(true), UpdatedAbsTrans(false),
+				SubtreeChanged(3)
 		{
 			if (parent)
 				parent->addChild(this);
@@ -266,6 +267,9 @@ namespace scene
 		\param isVisible If the node shall be visible. */
 		virtual void setVisible(bool isVisible)
 		{
+			// Hidden nodes are not animated
+			if (isVisible && !IsVisible)
+				markSubtreeChanged(1);
 			IsVisible = isVisible;
 		}
 
@@ -304,6 +308,7 @@ namespace scene
 				child->remove(); // remove from old parent
 				Children.push_back(child);
 				child->Parent = this;
+				markSubtreeChanged(3);
 			}
 		}
 
@@ -323,6 +328,7 @@ namespace scene
 					child->Parent = 0;
 					child->drop();
 					Children.erase(i);
+					markSubtreeChanged(2);
 					return true;
 				}
 			}
@@ -343,6 +349,7 @@ namespace scene
 				Children[i]->drop();
 			}
 			Children.clear();
+			markSubtreeChanged(2);
 		}
 
 
@@ -364,6 +371,7 @@ namespace scene
 			{
 				Animators.push_back(animator);
 				animator->grab();
+				markSubtreeChanged(3);
 			}
 		}
 
@@ -389,6 +397,7 @@ namespace scene
 				{
 					(*it)->drop();
 					Animators.erase(it);
+					markSubtreeChanged(2);
 					return;
 				}
 			}
@@ -405,6 +414,7 @@ namespace scene
 				(*it)->drop();
 
 			Animators.clear();
+			markSubtreeChanged(2);
 		}
 
 
@@ -484,6 +494,7 @@ namespace scene
 				return;
 			RelativeScale = scale;
 			NeedsUpdateAbsTrans = true;
+			markSubtreeChanged(1);
 		}
 
 
@@ -507,6 +518,7 @@ namespace scene
 				return;
 			RelativeRotation = rotation;
 			NeedsUpdateAbsTrans = true;
+			markSubtreeChanged(1);
 		}
 
 
@@ -529,6 +541,7 @@ namespace scene
 				return;
 			RelativeTranslation = newpos;
 			NeedsUpdateAbsTrans = true;
+			markSubtreeChanged(1);
 		}
 
 
@@ -790,7 +803,20 @@ namespace scene
 		//! STK addition to optimize updateAbsolutePosition, only do that if changed transformation.
 		bool getNeedsUpdateAbsTrans() const { return NeedsUpdateAbsTrans; }
 		bool getUpdatedAbsTrans() const { return UpdatedAbsTrans; }
-		void setNeedsUpdateAbsTrans(bool val) { NeedsUpdateAbsTrans = val; }
+		void setNeedsUpdateAbsTrans(bool val)
+		{
+			NeedsUpdateAbsTrans = val;
+			if (val)
+				markSubtreeChanged(1);
+		}
+
+		//! Marks this node and all its parents: 1 if something in it moved,
+		//! 2 if its nodes or animators changed (see CEmptySceneNode::OnAnimate)
+		void markSubtreeChanged(u8 what)
+		{
+			for (ISceneNode* node = this; node; node = node->Parent)
+				node->SubtreeChanged |= what;
+		}
 		void setUpdatedAbsTrans(bool val) { UpdatedAbsTrans = val; }
 		virtual void resetFirstRenderInfo(std::shared_ptr<GE::GERenderInfo> ri) {}
 
@@ -897,6 +923,9 @@ namespace scene
 		bool IsDebugObject;
 
 		bool NeedsUpdateAbsTrans, UpdatedAbsTrans;
+
+		//! What changed in this node or under it, see markSubtreeChanged
+		u8 SubtreeChanged;
 	};
 
 

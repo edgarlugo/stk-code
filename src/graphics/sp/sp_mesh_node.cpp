@@ -77,6 +77,8 @@ void SPMeshNode::setAnimationState(bool val)
         !GraphicsRestrictions::isDisabled
         (GraphicsRestrictions::GR_HARDWARE_SKINNING);
 #endif
+    // Static subtrees are skipped by OnAnimate: check them again
+    markSubtreeChanged(2);
 }   // setAnimationState
 
 // ----------------------------------------------------------------------------
@@ -86,6 +88,8 @@ void SPMeshNode::setMesh(irr::scene::IAnimatedMesh* mesh)
     m_skinning_offset = -32768;
     m_saved_transition_frame = -1.0f;
     m_animated = false;
+    // Static subtrees are skipped by OnAnimate: check them again
+    markSubtreeChanged(2);
     m_mesh = static_cast<SPMesh*>(mesh);
     CAnimatedMeshSceneNode::setMesh(mesh);
     cleanJoints();

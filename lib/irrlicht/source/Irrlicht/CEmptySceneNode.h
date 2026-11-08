@@ -34,6 +34,23 @@ namespace scene
 		//! Creates a clone of this scene node and its children.
 		virtual ISceneNode* clone(ISceneNode* newParent=0, ISceneManager* newManager=0);
 
+		//! Skips the subtree while nothing changed in it if it is static.
+		virtual void OnAnimate(u32 timeMs);
+
+		//! Nodes that don't need animating while they don't move (none if NULL)
+		static bool (*StaticNodeCheck)(ISceneNode* node);
+
+		//! All nodes under this one pass StaticNodeCheck and have no animators
+		bool StaticSubtree = false;
+
+		//! Number of times the subtree was animated
+		u32 AnimateCount = 0;
+
+		//! For the user: box of the static subtree and the AnimateCount it was made with
+		core::aabbox3d<f32> StaticBox;
+		u32 StaticBoxCount = 0xFFFFFFFF;
+		bool StaticBoxEmpty = true;
+
 	private:
 
 		core::aabbox3d<f32> Box;

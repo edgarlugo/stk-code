@@ -32,6 +32,48 @@ void CEmptySceneNode::OnRegisterSceneNode()
 }
 
 
+bool (*CEmptySceneNode::StaticNodeCheck)(ISceneNode* node) = 0;
+
+static bool isStaticSubtree(ISceneNode* node)
+{
+	const core::array<ISceneNode*>& children = node->getChildren();
+	for (unsigned i = 0; i < children.size(); ++i)
+	{
+		if (!children[i]->getAnimators().empty() ||
+			!CEmptySceneNode::StaticNodeCheck(children[i]) ||
+			!isStaticSubtree(children[i]))
+			return false;
+	}
+	return true;
+}
+
+
+void CEmptySceneNode::OnAnimate(u32 timeMs)
+{
+	if (!IsVisible)
+		return;
+
+	if (StaticNodeCheck)
+	{
+		if (SubtreeChanged & 2)
+		{
+			StaticSubtree = Animators.empty() && isStaticSubtree(this);
+			SubtreeChanged &= ~2;
+		}
+		if (StaticSubtree && !(SubtreeChanged & 1) &&
+			!(Parent && Parent->getUpdatedAbsTrans()))
+		{
+			UpdatedAbsTrans = false;
+			return;
+		}
+	}
+
+	ISceneNode::OnAnimate(timeMs);
+	SubtreeChanged &= ~1;
+	AnimateCount++;
+}
+
+
 //! render
 void CEmptySceneNode::render()
 {

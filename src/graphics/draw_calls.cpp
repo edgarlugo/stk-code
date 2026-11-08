@@ -23,6 +23,7 @@
 #include "config/user_config.hpp"
 #include "graphics/cpu_particle_manager.hpp"
 #include "graphics/irr_driver.hpp"
+#include "graphics/light.hpp"
 #include "graphics/lod_node.hpp"
 #include "graphics/shaders.hpp"
 #include "graphics/stk_particle.hpp"
@@ -38,6 +39,82 @@
 #include <ICameraSceneNode.h>
 #include <ISceneManager.h>
 #include <SViewFrustum.h>
+#include "../../lib/irrlicht/source/Irrlicht/CEmptySceneNode.h"
+
+// ----------------------------------------------------------------------------
+/** Nodes that only change when they move. */
+static bool isStaticSPNode(scene::ISceneNode* node)
+{
+    switch ((int)node->getType())
+    {
+    case scene::ESNT_EMPTY:
+    case scene::ESNT_LOD_NODE:
+        return true;
+    case scene::ESNT_ANIMATED_MESH:
+        return !static_cast<SP::SPMeshNode*>(node)->getAnimationState();
+    case scene::ESNT_UNKNOWN:
+        return dynamic_cast<LightNode*>(node) != NULL;
+    default:
+        return false;
+    }
+}   // isStaticSPNode
+
+// ----------------------------------------------------------------------------
+/** Adds the boxes of the meshes under node, whose transformation is m. */
+static void addStaticBox(scene::ISceneNode* node, const core::matrix4& m,
+                         core::aabbox3df& box, bool& empty)
+{
+    const core::array<scene::ISceneNode*>& children = node->getChildren();
+    for (unsigned i = 0; i < children.size(); i++)
+    {
+        const core::matrix4 child_m = m * children[i]->getRelativeTransformation();
+        if (children[i]->getType() == scene::ESNT_ANIMATED_MESH)
+        {
+            core::aabbox3df b = children[i]->getBoundingBox();
+            child_m.transformBoxEx(b);
+            if (empty)
+                box = b;
+            else
+                box.addInternalBox(b);
+            empty = false;
+        }
+        addStaticBox(children[i], child_m, box, empty);
+    }
+}   // addStaticBox
+
+// ----------------------------------------------------------------------------
+/** True if node is a static subtree (CEmptySceneNode::OnAnimate)
+ *  whose meshes are all out of the camera frustum. */
+static bool isStaticSubtreeOutOfView(scene::ISceneNode* node,
+                                     const scene::ICameraSceneNode* cam)
+{
+    scene::CEmptySceneNode* e = static_cast<scene::CEmptySceneNode*>(node);
+    if (!e->StaticSubtree || CVS->isDeferredEnabled())
+        return false;
+    if (e->StaticBoxCount != e->AnimateCount)
+    {
+        e->StaticBoxEmpty = true;
+        addStaticBox(e, e->getAbsoluteTransformation(), e->StaticBox,
+            e->StaticBoxEmpty);
+        e->StaticBoxCount = e->AnimateCount;
+    }
+    if (e->StaticBoxEmpty)
+        return true;
+    const core::aabbox3df& box = e->StaticBox;
+    const scene::SViewFrustum& frust = *cam->getViewFrustum();
+    for (s32 i = 0; i < scene::SViewFrustum::VF_PLANE_COUNT; i++)
+    {
+        // The box corner nearest to the inside of the plane
+        const core::plane3df& plane = frust.planes[i];
+        const core::vector3df corner(
+            plane.Normal.X >= 0.0f ? box.MinEdge.X : box.MaxEdge.X,
+            plane.Normal.Y >= 0.0f ? box.MinEdge.Y : box.MaxEdge.Y,
+            plane.Normal.Z >= 0.0f ? box.MinEdge.Z : box.MaxEdge.Z);
+        if (plane.Normal.dotProduct(corner) + plane.D > 0.0f)
+            return true;
+    }
+    return false;
+}   // isStaticSubtreeOutOfView
 
 // ----------------------------------------------------------------------------
 bool DrawCalls::isCulledPrecise(const scene::ICameraSceneNode *cam,
@@ -151,6 +228,9 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
 
         // Try the dynamic_casts below only on the node types they can match
         const scene::ESCENE_NODE_TYPE type = List[i]->getType();
+        // Static subtrees out of view
+        if (type == ESNT_EMPTY && isStaticSubtreeOutOfView(List[i], cam))
+            continue;
         if (type == ESNT_LOD_NODE)
         {
             LODNode *node = static_cast<LODNode *>(List[i]);
@@ -218,11 +298,14 @@ void DrawCalls::parseSceneManager(core::array<scene::ISceneNode*> &List,
 DrawCalls::DrawCalls()
 {
     m_sync = 0;
+    // With the SP, OnAnimate skips the static subtrees while they don't change
+    scene::CEmptySceneNode::StaticNodeCheck = isStaticSPNode;
 } //DrawCalls
 
 // ----------------------------------------------------------------------------
 DrawCalls::~DrawCalls()
 {
+    scene::CEmptySceneNode::StaticNodeCheck = NULL;
     CPUParticleManager::kill();
     STKParticle::destroyFlipsBuffer();
 } //~DrawCalls
