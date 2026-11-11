@@ -713,9 +713,15 @@ void MainLoop::run()
             TimePoint frame_end = std::chrono::steady_clock::now();
             double frame_time = convertToTime(frame_end, frame_start) * 0.001;
             const double current_fps = 1.0 / frame_time;
+#ifdef __vita__
+            // The screen of the Vita refreshes at 60 Hz, so more frames are never
+            // shown, also with vsync disabled
+            const double max_fps = std::min(60, (int)UserConfigParams::m_max_fps);
+#else
             const double max_fps =
                 (irr_driver->isRecording() && UserConfigParams::m_limit_game_fps) ?
                 UserConfigParams::m_record_fps : UserConfigParams::m_max_fps;
+#endif
 
             // Throttle fps if more than maximum, which can reduce
             // the noise the fan on a graphics card makes.
