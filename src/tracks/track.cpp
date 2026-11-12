@@ -1678,6 +1678,9 @@ static std::vector<video::ITexture*> useTextureAtlases(
              m.MaterialType != video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF &&
              m.MaterialType != video::EMT_STK_GRASS))
             return -1;
+        // A fully transparent texture keeps its buffers, which are not drawn
+        if (t->isFullyTransparent())
+            return -1;
         const core::dimension2du& size = t->getSize();
         if (size.Width > max_tile || size.Height > max_tile ||
             (size.Width & (size.Width - 1)) || (size.Height & (size.Height - 1)))

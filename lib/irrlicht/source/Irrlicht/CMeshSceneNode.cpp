@@ -196,6 +196,11 @@ void CMeshSceneNode::render()
 #ifdef __vita__
 					if (frustum && outsideFrustum(frustum, AbsoluteTransformation, mb->getBoundingBox()))
 						continue;
+					// Invisible walls and zones of the tracks: nothing to draw
+					if ((material.MaterialType == video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF ||
+						material.MaterialType == video::EMT_TRANSPARENT_ALPHA_CHANNEL) &&
+						material.getTexture(0) && material.getTexture(0)->isFullyTransparent())
+						continue;
 #endif
 					driver->setMaterial(material);
 					driver->drawMeshBuffer(mb);

@@ -189,6 +189,10 @@ public:
 	\return True if this is a render target, otherwise false. */
 	virtual bool isRenderTarget() const { return false; }
 
+	//! Returns true if every texel of the texture has alpha 0
+	/** Alpha tested or blended materials draw nothing with it. */
+	virtual bool isFullyTransparent() const { return false; }
+
 	//! Get name of texture (in most cases this is the filename)
 	const io::SNamedPath& getName() const { return NamedPath; }
 

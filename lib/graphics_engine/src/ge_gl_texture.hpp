@@ -30,6 +30,8 @@ private:
 
     bool m_single_channel;
 
+    bool m_fully_transparent;
+
     // ------------------------------------------------------------------------
     void upload(uint8_t* data);
     // ------------------------------------------------------------------------
@@ -78,6 +80,8 @@ public:
     virtual void regenerateMipMapLevels(void* mipmap_data = NULL)            {}
     // ------------------------------------------------------------------------
     virtual u64 getTextureHandler() const            { return m_texture_name; }
+    // ------------------------------------------------------------------------
+    virtual bool isFullyTransparent() const     { return m_fully_transparent; }
     // ------------------------------------------------------------------------
     virtual unsigned int getTextureSize() const      { return m_texture_size; }
     // ------------------------------------------------------------------------

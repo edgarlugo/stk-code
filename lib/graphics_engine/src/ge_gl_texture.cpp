@@ -19,7 +19,8 @@ GEGLTexture::GEGLTexture(const std::string& path,
            : video::ITexture(path.c_str()), m_image_mani(image_mani),
              m_locked_data(NULL), m_texture_name(0), m_texture_size(0),
              m_driver_type(GE::getDriver()->getDriverType()),
-             m_disable_reload(false), m_single_channel(false)
+             m_disable_reload(false), m_single_channel(false),
+             m_fully_transparent(false)
 {
     reload();
 }   // GEGLTexture
@@ -29,7 +30,8 @@ GEGLTexture::GEGLTexture(video::IImage* img, const std::string& name)
            : video::ITexture(name.c_str()), m_image_mani(nullptr),
              m_locked_data(NULL), m_texture_name(0), m_texture_size(0),
              m_driver_type(GE::getDriver()->getDriverType()),
-             m_disable_reload(true), m_single_channel(false)
+             m_disable_reload(true), m_single_channel(false),
+             m_fully_transparent(false)
 {
     if (!img)
     {
@@ -50,7 +52,8 @@ GEGLTexture::GEGLTexture(const std::string& name, unsigned int size,
            : video::ITexture(name.c_str()), m_image_mani(nullptr),
              m_locked_data(NULL), m_texture_name(0), m_texture_size(0),
              m_driver_type(GE::getDriver()->getDriverType()),
-             m_disable_reload(true), m_single_channel(false)
+             m_disable_reload(true), m_single_channel(false),
+             m_fully_transparent(false)
 {
     glGenTextures(1, &m_texture_name);
     m_orig_size.Width = size;
@@ -122,6 +125,21 @@ void GEGLTexture::upload(uint8_t* data)
 {
     const unsigned int w = m_size.Width;
     const unsigned int h = m_size.Height;
+    // Tracks use small fully transparent textures for invisible walls and
+    // zones: their alpha tested or blended buffers are not drawn
+    m_fully_transparent = false;
+    if (data && !m_single_channel && w * h <= 256 * 256)
+    {
+        m_fully_transparent = true;
+        for (unsigned int i = 0; i < w * h; i++)
+        {
+            if (data[i * 4 + 3] != 0)
+            {
+                m_fully_transparent = false;
+                break;
+            }
+        }
+    }
     unsigned int format = m_single_channel ? GL_RED : GL_BGRA;
     unsigned int internal_format = m_single_channel ? GL_R8 : GL_RGBA8;
 #ifdef __vita__
