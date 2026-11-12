@@ -44,8 +44,31 @@
 #include "tracks/track_object.hpp"
 #include "utils/profiler.hpp"
 #include "utils/stk_process.hpp"
+#include "utils/vita_jobs.hpp"
 
 #include <IVideoDriver.h>
+
+#ifdef __VITA__
+#include <psp2/kernel/threadmgr.h>
+#include <pthread.h>
+
+// main.cpp wraps pthread_create to give every thread a 2 MB stack: the real
+// one keeps a small stack for the step thread
+extern "C" int __real_pthread_create(pthread_t* thread,
+                                     const pthread_attr_t* attr,
+                                     void* (*start)(void*), void* arg);
+
+namespace
+{
+    /** Signalled when the step thread has a step to run, and when it is
+     *  done. */
+    SceUID g_step_start = -1;
+    SceUID g_step_done  = -1;
+    Physics* g_step_physics = NULL;
+    /** -1 not tried yet, 0 the thread could not be started, 1 running. */
+    int g_step_thread = -1;
+}   // namespace
+#endif
 
 //=============================================================================
 Physics* g_physics[PT_COUNT];
@@ -77,6 +100,9 @@ void Physics::destroy()
  */
 Physics::Physics() : btSequentialImpulseConstraintSolver()
 {
+    m_step_on_other_core  = false;
+    m_deferred_step       = STEP_NONE;
+    m_defer_step          = false;
     m_collision_conf      = new btDefaultCollisionConfiguration();
     m_dispatcher          = new btCollisionDispatcher(m_collision_conf);
 }   // Physics
@@ -117,6 +143,13 @@ void Physics::init(const Vec3 &world_min, const Vec3 &world_max)
 //-----------------------------------------------------------------------------
 Physics::~Physics()
 {
+#ifdef __VITA__
+    // A running step uses the world: wait for it. A deferred step that was
+    // not started is dropped with the world.
+    if (m_deferred_step == STEP_RUNNING)
+        sceKernelWaitSema(g_step_done, 1, NULL);
+    m_deferred_step = STEP_NONE;
+#endif
     delete m_debug_drawer;
     delete m_dynamics_world;
     delete m_axis_sweep;
@@ -133,6 +166,7 @@ Physics::~Physics()
  */
 void Physics::addKart(const AbstractKart *kart)
 {
+    finishDeferredStep();
     const btCollisionObjectArray &all_objs =
         m_dynamics_world->getCollisionObjectArray();
     for(unsigned int i=0; i<(unsigned int)all_objs.size(); i++)
@@ -151,6 +185,7 @@ void Physics::addKart(const AbstractKart *kart)
  */
 void Physics::removeKart(const AbstractKart *kart)
 {
+    finishDeferredStep();
     // We can't simply remove a kart from the physics world when currently
     // loops over all kart objects are active. This can happen in collision
     // handling, where a collision of a kart with a cake etc. removes
@@ -178,9 +213,150 @@ void Physics::removeKart(const AbstractKart *kart)
  */
 void Physics::update(int ticks)
 {
+    // The deferred step of an earlier tick comes first
+    finishDeferredStep();
+
     PROFILER_PUSH_CPU_MARKER("Physics", 0, 0, 0);
 
+#ifdef __VITA__
+    // The step of the last tick before a frame is drawn runs on another core
+    // while the frame is drawn (see setDeferStep()). Not in network games,
+    // where the order of the work must not differ from the server.
+    if (m_defer_step && VitaJobs::isEnabled())
+    {
+        m_all_collisions.clear();
+        m_deferred_crashes.clear();
+        m_deferred_step = STEP_DEFERRED;
+        PROFILER_POP_CPU_MARKER();
+        return;
+    }
+#endif
+
     m_physics_loop_active = true;
+    step();
+    handleCollisions();
+    PROFILER_POP_CPU_MARKER();
+}   // update
+
+// ----------------------------------------------------------------------------
+/** The main loop calls this with true before the last tick before a frame is
+ *  drawn and with false after it: then the physics step of that tick is only
+ *  started by startDeferredStep() once the graphics of the frame are updated,
+ *  and runs on another core while the frame is drawn. The kart updates of
+ *  the next tick need its result, so finishDeferredStep() waits for it after
+ *  the frame, and so does everything that changes the physics world.
+ */
+void Physics::setDeferStep(bool defer)
+{
+    m_defer_step = defer;
+}   // setDeferStep
+
+// ----------------------------------------------------------------------------
+#ifdef __VITA__
+void* Physics::stepThread(void *arg)
+{
+    // The second core: the main thread keeps the first one
+    sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(),
+                                         SCE_KERNEL_CPU_MASK_USER_1);
+    while (true)
+    {
+        sceKernelWaitSema(g_step_start, 1, NULL);
+        g_step_physics->step();
+        sceKernelSignalSema(g_step_done, 1);
+    }
+    return NULL;
+}   // stepThread
+#endif
+
+// ----------------------------------------------------------------------------
+/** Starts the deferred physics step on another core, if there is one. */
+void Physics::startDeferredStep()
+{
+#ifdef __VITA__
+    if (m_deferred_step != STEP_DEFERRED)
+        return;
+    if (g_step_thread < 0)
+    {
+        g_step_thread = 0;
+        g_step_start = sceKernelCreateSema("stk_step_start", 0, 0, 1, NULL);
+        g_step_done = sceKernelCreateSema("stk_step_done", 0, 0, 1, NULL);
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, 256 * 1024);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        pthread_t thread;
+        if (g_step_start >= 0 && g_step_done >= 0 &&
+            __real_pthread_create(&thread, &attr, stepThread, NULL) == 0)
+            g_step_thread = 1;
+        pthread_attr_destroy(&attr);
+        Log::info("Physics", "Step thread %s.",
+                  g_step_thread ? "started" : "could not be started");
+    }
+    if (g_step_thread == 0)
+        return;
+    // Only the main thread starts jobs on the other cores: the karts of
+    // this step cast their wheel rays one after the other. Kart::crashed()
+    // is called after the step, on the main thread.
+    m_step_on_other_core = true;
+    m_dynamics_world->setSerialActions(true);
+    m_physics_loop_active = true;
+    m_deferred_step = STEP_RUNNING;
+    g_step_physics = this;
+    sceKernelSignalSema(g_step_start, 1);
+#endif
+}   // startDeferredStep
+
+// ----------------------------------------------------------------------------
+/** Waits for the deferred physics step (or runs it here if it was not
+ *  started), then handles its collisions. */
+void Physics::finishDeferredStep()
+{
+    if (m_deferred_step == STEP_NONE)
+        return;
+#ifdef __VITA__
+    if (m_deferred_step == STEP_RUNNING)
+        sceKernelWaitSema(g_step_done, 1, NULL);
+    else
+    {
+        m_physics_loop_active = true;
+        step();
+    }
+#endif
+    m_deferred_step = STEP_NONE;
+    m_step_on_other_core = false;
+    m_dynamics_world->setSerialActions(false);
+    // The karts that hit the track during the step, in the order of the step
+    for (unsigned int i = 0; i < m_deferred_crashes.size(); i++)
+    {
+        const DeferredCrash &c = m_deferred_crashes[i];
+        c.m_kart->crashed(c.m_material, c.m_normal);
+    }
+    m_deferred_crashes.clear();
+    handleCollisions();
+}   // finishDeferredStep
+
+// ----------------------------------------------------------------------------
+/** A kart hit the track or a static object during a step. */
+void Physics::crashed(AbstractKart *kart, const Material *m,
+                      const btVector3 &normal)
+{
+    if (m_step_on_other_core)
+    {
+        DeferredCrash c;
+        c.m_kart     = kart;
+        c.m_material = m;
+        c.m_normal   = normal;
+        m_deferred_crashes.push_back(c);
+    }
+    else
+        kart->crashed(m, normal);
+}   // crashed
+
+// ----------------------------------------------------------------------------
+/** One physics step. The collisions it finds are stored in m_all_collisions
+ *  and handled by handleCollisions(). */
+void Physics::step()
+{
     // Bullet can report the same collision more than once (up to 4
     // contact points per collision). Additionally, more than one internal
     // substep might be taken, resulting in potentially even more
@@ -203,7 +379,13 @@ void Physics::update(int ticks)
                      World::getWorld()->getTicksSinceStart(),
                      StkTime::getRealTime() - start);
     }
+}   // step
 
+// ----------------------------------------------------------------------------
+/** Handles the collisions of the last step. */
+void Physics::handleCollisions()
+{
+    m_physics_loop_active = true;
     // Now handle the actual collision. Note: flyables can not be removed
     // inside of this loop, since the same flyables might hit more than one
     // other object. So only a flag is set in the flyables, the actual
@@ -418,9 +600,7 @@ void Physics::update(int ticks)
     for(unsigned int i=0; i<m_karts_to_delete.size(); i++)
         removeKart(m_karts_to_delete[i]);
     m_karts_to_delete.clear();
-
-    PROFILER_POP_CPU_MARKER();
-}   // update
+}   // handleCollisions
 
 //-----------------------------------------------------------------------------
 /** Handles the special case of two karts colliding with each other, which
@@ -629,7 +809,7 @@ btScalar Physics::solveGroup(btCollisionObject** bodies, int numBodies,
                 // always has the kart as object A, not B.
                 const btVector3 &normal = -contact_manifold->getContactPoint(0)
                                                             .m_normalWorldOnB;
-                kart->crashed(m, normal);
+                crashed(kart, m, normal);
             }
             else if(upB->is(UserPointer::UP_PHYSICAL_OBJECT))
             {
@@ -664,7 +844,7 @@ btScalar Physics::solveGroup(btCollisionObject** bodies, int numBodies,
                            : NULL;
                 const btVector3 &normal = contact_manifold->getContactPoint(0)
                                                            .m_normalWorldOnB;
-                kart->crashed(m, normal);   // Kart hit track
+                crashed(kart, m, normal);   // Kart hit track
             }
             else if(upB->is(UserPointer::UP_FLYABLE))
                 // 2.1 projectile hits kart
@@ -689,7 +869,7 @@ btScalar Physics::solveGroup(btCollisionObject** bodies, int numBodies,
                     AbstractKart *kart = upA->getPointerKart();
                     const btVector3 &normal = contact_manifold->getContactPoint(0)
                         .m_normalWorldOnB;
-                    kart->crashed((Material*)NULL, normal);
+                    crashed(kart, NULL, normal);
                 }   // isStatiObject
             }
             else if(upB->is(UserPointer::UP_ANIMATION))

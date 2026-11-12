@@ -34,6 +34,7 @@
 #include "physics/user_pointer.hpp"
 
 class AbstractKart;
+class Material;
 class STKDynamicsWorld;
 class Vec3;
 
@@ -147,6 +148,33 @@ private:
     btDefaultCollisionConfiguration *m_collision_conf;
     CollisionList                    m_all_collisions;
 
+    /** A kart that hit the track or a static object during a step that ran
+     *  on another core: Kart::crashed() is called for it afterwards, on the
+     *  main thread, since it can play sounds and add particle emitters. */
+    struct DeferredCrash
+    {
+        AbstractKart   *m_kart;
+        const Material *m_material;
+        btVector3       m_normal;
+    };
+    std::vector<DeferredCrash>       m_deferred_crashes;
+
+    /** True while a step runs on another core (see setDeferStep()). */
+    bool                             m_step_on_other_core;
+
+    /** NONE, or a step that was deferred and not started yet, or a step that
+     *  runs on another core. */
+    enum { STEP_NONE, STEP_DEFERRED, STEP_RUNNING } m_deferred_step;
+
+    /** True while the main loop updates the last tick before a frame. */
+    bool                             m_defer_step;
+
+    void  step             ();
+    void  handleCollisions ();
+    void  crashed          (AbstractKart *kart, const Material *m,
+                            const btVector3 &normal);
+    static void* stepThread(void *arg);
+
              Physics();
     virtual ~Physics();
 
@@ -160,9 +188,20 @@ public:
     // ----------------------------------------------------------------------------------------
     void  init             (const Vec3 &min_world, const Vec3 &max_world);
     void  addKart          (const AbstractKart *k);
-    void  addBody          (btRigidBody* b) {m_dynamics_world->addRigidBody(b);}
+    void  addBody          (btRigidBody* b)
+    {
+        finishDeferredStep();
+        m_dynamics_world->addRigidBody(b);
+    }
     void  removeKart       (const AbstractKart *k);
-    void  removeBody       (btRigidBody* b) {m_dynamics_world->removeRigidBody(b);}
+    void  removeBody       (btRigidBody* b)
+    {
+        finishDeferredStep();
+        m_dynamics_world->removeRigidBody(b);
+    }
+    void  setDeferStep     (bool defer);
+    void  startDeferredStep();
+    void  finishDeferredStep();
     void  KartKartCollision(AbstractKart *ka, const Vec3 &contact_point_a,
                             AbstractKart *kb, const Vec3 &contact_point_b);
     void  update           (int ticks);

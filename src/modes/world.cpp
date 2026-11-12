@@ -621,6 +621,11 @@ Controller* World::loadAIController(AbstractKart* kart)
 //-----------------------------------------------------------------------------
 World::~World()
 {
+    // A deferred physics step of the last tick, while the karts and the
+    // track still exist
+    if (Physics::get())
+        Physics::get()->finishDeferredStep();
+
     if (m_process_type == PT_MAIN)
     {
         material_manager->unloadAllTextures();

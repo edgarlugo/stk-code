@@ -27,6 +27,8 @@
  */
 class STKDynamicsWorld : public btDiscreteDynamicsWorld
 {
+private:
+    bool m_serial_actions;
 public:
     /** The standard constructor which just created a btDiscreteDynamicsWorld. */
     STKDynamicsWorld(btDispatcher*             dispatcher,
@@ -38,9 +40,14 @@ public:
                                              constraintSolver,
                                              collisionConfiguration)
     {
+        m_serial_actions = false;
     }
     // ------------------------------------------------------------------------
     virtual void updateActions(btScalar timeStep);
+    // ------------------------------------------------------------------------
+    /** True while a step runs on a thread that must not start jobs on the
+     *  other cores. */
+    void setSerialActions(bool serial) { m_serial_actions = serial; }
 
     /** Resets m_localTime to 0. This allows more precise replay of
      *  physics, which is important for replaying histories. */

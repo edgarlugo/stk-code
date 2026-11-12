@@ -47,6 +47,7 @@
 #include "network/server.hpp"
 #include "network/stk_host.hpp"
 #include "online/request_manager.hpp"
+#include "physics/physics.hpp"
 #include "race/history.hpp"
 #include "race/race_manager.hpp"
 #include "states_screens/dialogs/server_info_dialog.hpp"
@@ -570,9 +571,15 @@ void MainLoop::run()
                 PROFILER_POP_CPU_MARKER();
 
                 // Render the previous frame, and also handle all user input.
+                // The physics step of the last tick runs meanwhile on another
+                // core (see Physics::setDeferStep()).
+                if (World::getWorld() && Physics::get())
+                    Physics::get()->startDeferredStep();
                 PROFILER_PUSH_CPU_MARKER("IrrDriver update", 0x00, 0x00, 0x7F);
                 irr_driver->update(frame_duration);
                 PROFILER_POP_CPU_MARKER();
+                if (World::getWorld() && Physics::get())
+                    Physics::get()->finishDeferredStep();
 
                 PROFILER_PUSH_CPU_MARKER("Input/GUI", 0x7F, 0x00, 0x00);
                 input_manager->update(frame_duration);
@@ -642,7 +649,16 @@ void MainLoop::run()
                 PROFILER_PUSH_CPU_MARKER("Update race", 0, 255, 255);
                 if (World::getWorld())
                 {
+                    // The physics step of the last tick before a frame can
+                    // run while the frame is drawn
+                    const bool defer = i == num_steps - 1 &&
+                        Physics::get() && !GUIEngine::isNoGraphics() &&
+                        !history->replayHistory();
+                    if (defer)
+                        Physics::get()->setDeferStep(true);
                     updateRace(1, fast_forward);
+                    if (defer && Physics::get())
+                        Physics::get()->setDeferStep(false);
                 }
                 PROFILER_POP_CPU_MARKER();
 

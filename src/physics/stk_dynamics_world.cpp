@@ -37,7 +37,7 @@ static void castWheelRays(void* actions, int index)
 void STKDynamicsWorld::updateActions(btScalar timeStep)
 {
     if (m_actions.size() < 2 || m_actions.size() > VitaJobs::MAX_JOBS ||
-        !VitaJobs::isEnabled())
+        m_serial_actions || !VitaJobs::isEnabled())
     {
         btDiscreteDynamicsWorld::updateActions(timeStep);
         return;
