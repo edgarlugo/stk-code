@@ -2385,10 +2385,10 @@ void *real_main(char *argv[]) {
 	// it sceGxmCreateRenderTarget fails to make the minimap's framebuffer
 	const int ram_threshold =
 		(vitaConfigFlag("vita_shader_renderer", false) ? 20 : 12) * 1024 * 1024;
-	// 4x MSAA costs ~6 ms of GPU per frame in the heavy tracks, 2x looks
-	// almost the same. vita_msaa="false" turns it off.
+	// 2x MSAA costs about a fifth of the GPU time in the heaviest tracks and
+	// barely shows at 960x544: off unless vita_msaa="true"
 	vglInitWithCustomThreshold(0, 960, 544, ram_threshold, 0, 0, 0,
-		vitaConfigFlag("vita_msaa", true) ? SCE_GXM_MULTISAMPLE_2X :
+		vitaConfigFlag("vita_msaa", false) ? SCE_GXM_MULTISAMPLE_2X :
 		SCE_GXM_MULTISAMPLE_NONE);
 	vglSetDisplayCallback(vitaDrawFPS);
 	int argc = 0;
