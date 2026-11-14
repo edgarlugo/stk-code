@@ -676,6 +676,11 @@ namespace UserConfigParams
         &m_video_group, "Use the shader-based renderer (OpenGL 3) of the PC "
         "version instead of the legacy one. Looks closer to the PC version "
         "but is slower. Read when the game starts."));
+    PARAM_PREFIX BoolUserConfigParam        m_vita_msaa
+        PARAM_DEFAULT(BoolUserConfigParam(true, "vita_msaa",
+        &m_video_group, "Smooth the edges with 2x multisampling. Off saves "
+        "about a fifth of the GPU time in the heaviest tracks. Read when the "
+        "game starts."));
 #endif
     PARAM_PREFIX BoolUserConfigParam        m_split_screen_horizontally
         PARAM_DEFAULT(BoolUserConfigParam(true, "split_screen_horizontally",
