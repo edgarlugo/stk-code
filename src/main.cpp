@@ -2244,6 +2244,8 @@ void vglSetParamBufferSize(uint32_t size);
 GLboolean vglInitWithCustomThreshold(int pool_size, int width, int height, int ram_threshold, int cdram_threshold, int phycont_threshold, int cdlg_threshold, SceGxmMultisampleMode msaa);
 void vglSetCircularPoolSize(uint32_t size);
 void vglSetDisplayCallback(void (*cb)(void *framebuf));
+GLboolean vglInit(int legacy_pool_size);
+void vglSwapBuffers(GLboolean has_commondialog);
 
 int __real_pthread_create(pthread_t * tid, const pthread_attr_t * attr, void *(*start) (void *), void *arg);
 int __wrap_pthread_create(pthread_t * tid, const pthread_attr_t * _attr, void *(*start) (void *), void *arg) {
@@ -2378,7 +2380,43 @@ static bool vitaConfigFlag(const char* name, bool default_value)
 	fclose(f);
 	return value;
 }
+// The game data is installed apart from the VPK: without it the game cannot
+// start, so the player is told where it goes instead
+static bool vitaDataInstalled()
+{
+	const std::string version = std::string("ux0:data/supertuxkart/stk-data/supertuxkart.") + STK_VERSION;
+	SceIoStat stat;
+	return sceIoGetstat(version.c_str(), &stat) >= 0;
+}
+static void vitaShowMissingData()
+{
+	vglInit(0x800000);
+	SceMsgDialogUserMessageParam msg = {};
+	msg.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
+	msg.msg = (const SceChar8 *)
+		"The SuperTuxKart data is not installed.\n\n"
+		"Extract supertuxkart-data.zip from the release to ux0:data/ "
+		"so that the folder ux0:data/supertuxkart/stk-data/ exists, "
+		"then start the game again.";
+	SceMsgDialogParam param;
+	sceMsgDialogParamInit(&param);
+	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
+	param.userMsgParam = &msg;
+	if (sceMsgDialogInit(&param) < 0)
+		return;
+	while (sceMsgDialogGetStatus() == SCE_COMMON_DIALOG_STATUS_RUNNING)
+	{
+		glClear(GL_COLOR_BUFFER_BIT);
+		vglSwapBuffers(GL_TRUE);
+	}
+	sceMsgDialogTerm();
+}
 void *real_main(char *argv[]) {
+	if (!vitaDataInstalled())
+	{
+		vitaShowMissingData();
+		return NULL;
+	}
 	vglSetParamBufferSize(6 * 1024 * 1024);
 	vglSetCircularPoolSize(30 * 1024 * 1024);
 	// The shader-based renderer needs more RAM left to the system: without
