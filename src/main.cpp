@@ -2684,6 +2684,13 @@ int main(int argc, char *argv[]) {
             {
                 irr_driver->getDevice()->setWindowMinimumSize(480, 480);
             }
+            #ifdef __vita__
+            // The Vita is played with its buttons: the phone dialog that asks
+            // for a touch, tilt or gyroscope control makes no sense there, so
+            // the first start takes the default it offers (steering wheel)
+            if (UserConfigParams::m_multitouch_controls == MULTITOUCH_CONTROLS_UNDEFINED)
+                UserConfigParams::m_multitouch_controls = MULTITOUCH_CONTROLS_STEERING_WHEEL;
+            #endif
             #ifdef MOBILE_STK
             if (UserConfigParams::m_multitouch_controls == MULTITOUCH_CONTROLS_UNDEFINED)
             {
