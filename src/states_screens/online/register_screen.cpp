@@ -36,6 +36,12 @@
 #include "utils/log.hpp"
 #include "utils/translation.hpp"
 
+#ifdef __vita__
+#include <psp2/apputil.h>
+#include <psp2/system_param.h>
+#include "utils/string_utils.hpp"
+#endif
+
 #ifdef __SWITCH__
 extern "C" {
   #define u64 uint64_t
@@ -109,6 +115,16 @@ void RegisterScreen::init()
     }
     else if (PlayerManager::get()->getNumPlayers() == 0)
     {
+#ifdef __vita__
+        // The user name of the console, so a new player only has to press OK
+        SceAppUtilInitParam init_param = {};
+        SceAppUtilBootParam boot_param = {};
+        sceAppUtilInit(&init_param, &boot_param); // fails harmlessly if already done
+        char nick[SCE_SYSTEM_PARAM_USERNAME_MAXSIZE] = {0};
+        if (sceAppUtilSystemParamGetString(SCE_SYSTEM_PARAM_ID_USERNAME,
+            (SceChar8 *)nick, sizeof(nick)) >= 0)
+            username = StringUtils::utf8ToWide(nick);
+#endif
 #ifndef MOBILE_STK
     // For mobile stk always use the name Player as in iOS the following
     // getenv return "mobile" for some reason
