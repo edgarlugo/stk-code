@@ -19,16 +19,26 @@ only in SuperTuxKart. With 6 karts most tracks run at about 60 FPS; the heaviest
   `<Video` section of `ux0:data/supertuxkart/config-0.10/config.xml`; it is
   read when the game starts.
 
+`vita_msaa="true"` in the same section smooths the edges with 2x multisampling,
+at the cost of about a fifth of the GPU time on the heaviest tracks.
+
 ## Installing
 
-1. Install the VPK (title ID `STKV00001`).
-2. Copy the game data to `ux0:data/supertuxkart/stk-data/`: the `assets/data`
-   folder of the official Android package (`SuperTuxKart-1.5.apk` from the
-   [1.5 release](https://github.com/supertuxkart/stk-code/releases/tag/1.5)),
-   then the `data` folder of this repository over it, replacing the files that
-   are in both.
+1. Install `supertuxkart.vpk` (title ID `STKV00001`) with VitaShell.
+2. Extract `supertuxkart-data.zip` to `ux0:data/`, so that the folder
+   `ux0:data/supertuxkart/stk-data/` exists (in VitaShell: open the zip, copy
+   the `supertuxkart` folder and paste it in `ux0:data/`).
 
-The game keeps its config and saves in `ux0:data/supertuxkart/`.
+Both files are on the [releases page](https://github.com/edgarlugo/stk-code/releases).
+If the data is missing, the game says so when it starts.
+
+The game keeps its config and saves in `ux0:data/supertuxkart/`, next to the
+data: updating the data never touches them.
+
+The data zip is the `assets/data` folder of the official Android package
+(`SuperTuxKart-1.5.apk` from the
+[1.5 release](https://github.com/supertuxkart/stk-code/releases/tag/1.5)) with
+the `data` folder of this repository copied over it.
 
 ## Building
 
