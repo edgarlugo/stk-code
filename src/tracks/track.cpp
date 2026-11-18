@@ -85,6 +85,7 @@
 #include "utils/string_utils.hpp"
 #include "utils/translation.hpp"
 
+#include <IAnimatedMeshSceneNode.h>
 #include <IBillboardTextSceneNode.h>
 #include <IFileSystem.h>
 #include <ILightSceneNode.h>
@@ -101,6 +102,7 @@
 #endif
 
 #include <algorithm>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <set>
@@ -383,12 +385,47 @@ void Track::cleanup()
     delete m_check_manager;
     m_check_manager = NULL;
 
+    // The track objects only take their meshes out of Irrlicht's mesh cache
+    // when nothing else uses them, but the nodes they left in the detached
+    // nodes still do: their meshes are taken out here, once those are gone.
+    // Otherwise the next track with a model of the same name would get the
+    // cached mesh, whose textures were freed with this track.
+    std::vector<scene::IMesh*> detached_meshes;
+    std::function<void(scene::ISceneNode*)> add_meshes =
+        [&](scene::ISceneNode* node)
+    {
+        scene::IMesh* mesh = NULL;
+        if (node->getType() == scene::ESNT_MESH)
+            mesh = ((scene::IMeshSceneNode*)node)->getMesh();
+        else if (node->getType() == scene::ESNT_ANIMATED_MESH)
+            mesh = ((scene::IAnimatedMeshSceneNode*)node)->getMesh();
+        if (mesh)
+        {
+            mesh->grab();
+            detached_meshes.push_back(mesh);
+        }
+        const core::array<scene::ISceneNode*>& children = node->getChildren();
+        for (u32 i = 0; i < children.size(); i++)
+            add_meshes(children[i]);
+    };
+    for (unsigned int i = 0; i < m_detached_nodes.size(); i++)
+        add_meshes(m_detached_nodes[i]);
+
     delete m_track_object_manager;
     m_track_object_manager = NULL;
 
     for (unsigned int i = 0; i < m_detached_nodes.size(); i++)
         m_detached_nodes[i]->drop();
     m_detached_nodes.clear();
+
+    // A mesh still in the cache is now held by the cache and here only (a
+    // mesh used more than once is in the list more than once)
+    for (unsigned int i = 0; i < detached_meshes.size(); i++)
+    {
+        if (detached_meshes[i]->getReferenceCount() == 2)
+            irr_driver->removeMeshFromCache(detached_meshes[i]);
+        detached_meshes[i]->drop();
+    }
 
     for (unsigned int i = 0; i < m_object_physics_only_nodes.size(); i++)
     {
