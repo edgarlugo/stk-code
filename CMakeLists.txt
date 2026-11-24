@@ -1038,7 +1038,7 @@ if (USE_VITA)
     set(VITA_APP_NAME "SuperTuxKart")
     set(VITA_TITLEID "STKV00001")
     set(VITA_VPKNAME "supertuxkart")
-    set(VITA_VERSION "01.01")
+    set(VITA_VERSION "01.02")
 	set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 
     vita_create_self(eboot.bin bin/supertuxkart UNSAFE)
