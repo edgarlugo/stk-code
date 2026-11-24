@@ -121,6 +121,10 @@ public:
                            int hats);
     // ------------------------------------------------------------------------
     void initSDLMapping();
+#ifdef __vita__
+    // ------------------------------------------------------------------------
+    bool getDPadAction(int id, bool in_game, PlayerAction* action) const;
+#endif
     // ------------------------------------------------------------------------
     bool useForceFeedback() const             { return m_use_force_feedback; }
     // ------------------------------------------------------------------------

@@ -237,6 +237,14 @@ bool GamePadDevice::processAndMapInput(Input::InputType type, const int id,
         assert(mode == InputManager::MENU);
         success = m_configuration->getMenuAction(type, id, value, action);
     }
+#ifdef __vita__
+    if (!success && type == Input::IT_STICKBUTTON &&
+        (mode == InputManager::INGAME || abs(*value) > Input::MAX_VALUE/2))
+    {
+        success = static_cast<GamepadConfig*>(m_configuration)
+            ->getDPadAction(id, mode == InputManager::INGAME, action);
+    }
+#endif
 
     return success;
 }   // processAndMapInput

@@ -655,6 +655,54 @@ fallback:
 #endif
 }   // initSDLMapping
 
+#ifdef __vita__
+// ----------------------------------------------------------------------------
+/** Returns the action of a d-pad button that has no binding: left and right
+ *  steer in races, and all four directions move in menus, so the d-pad works
+ *  next to the left stick.
+ *  \param id The button.
+ *  \param in_game True in races, false in menus.
+ *  \param[out] action The action, only set if true is returned.
+ */
+bool GamepadConfig::getDPadAction(int id, bool in_game,
+                                  PlayerAction* action) const
+{
+#ifndef SERVER_ONLY
+    for (int n = PA_FIRST_GAME_ACTION; n <= PA_LAST_MENU_ACTION; n++)
+    {
+        if (m_bindings[n].getType() == Input::IT_STICKBUTTON &&
+            m_bindings[n].getId() == id)
+            return false;
+    }
+    auto it = m_sdl_mapping.find(std::make_tuple(id, Input::AD_NEUTRAL));
+    if (it == m_sdl_mapping.end())
+        return false;
+    switch (it->second)
+    {
+    case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+        *action = in_game ? PA_STEER_LEFT : PA_MENU_LEFT;
+        return true;
+    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+        *action = in_game ? PA_STEER_RIGHT : PA_MENU_RIGHT;
+        return true;
+    case SDL_CONTROLLER_BUTTON_DPAD_UP:
+        if (in_game)
+            return false;
+        *action = PA_MENU_UP;
+        return true;
+    case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+        if (in_game)
+            return false;
+        *action = PA_MENU_DOWN;
+        return true;
+    default:
+        break;
+    }
+#endif
+    return false;
+}   // getDPadAction
+#endif
+
 // ----------------------------------------------------------------------------
 bool GamepadConfig::isAnalog(Input::InputType type, int id) const
 {
