@@ -10,6 +10,24 @@ All the game modes work offline: races, time trials, follow the leader, battles
 only in SuperTuxKart. With 6 karts most tracks run at about 60 FPS; the heaviest
 (Black Forest, Cocoa Temple, Candela City) at 53-58.
 
+## Controls
+
+| Button | Action |
+|---|---|
+| Cross | Accelerate |
+| Square | Brake / reverse |
+| Left stick or d-pad | Steer |
+| R | Skid (release it for a boost) |
+| Circle | Use the item |
+| L | Nitro |
+| Triangle | Look back |
+| Select | Rescue |
+| Start | Pause |
+
+They can be changed in Options > Controls. Configurations saved by earlier
+versions with the old default buttons (triangle to accelerate) are updated
+when the game starts.
+
 ## Renderers
 
 - **Legacy** (default): irrlicht's fixed pipeline over OpenGL ES 2, the fastest.
