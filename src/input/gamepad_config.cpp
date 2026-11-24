@@ -52,6 +52,11 @@ enum AxisWithDirection : unsigned
 
 using namespace irr;
 
+#ifdef __vita__
+/** Written to the gamepad configurations of input.xml, see load(). */
+static const int VITA_LAYOUT_VERSION = 1;
+#endif
+
 GamepadConfig::GamepadConfig( const std::string &name,
                               const int        axis_count,
                               const int        button_count )
@@ -100,6 +105,27 @@ bool GamepadConfig::load(const XMLNode *config)
         Log::error("DeviceConfig", "Unnamed joystick in config file.");
         return false;
     }
+#ifdef __vita__
+    // Configurations saved before the cross to accelerate layout have no
+    // vita-layout attribute. If they still have the old default buttons
+    // (triangle to accelerate, cross to look back), swap them.
+    int layout = 0;
+    config->get("vita-layout", &layout);
+    if (layout < VITA_LAYOUT_VERSION && getName() == "PSVita Controller")
+    {
+        const Binding& accel = getBinding(PA_ACCEL);
+        const Binding& look_back = getBinding(PA_LOOK_BACK);
+        if (accel.getType() == Input::IT_STICKBUTTON && accel.getId() == 0 &&
+            look_back.getType() == Input::IT_STICKBUTTON &&
+            look_back.getId() == 2)
+        {
+            setBinding(PA_ACCEL, Input::IT_STICKBUTTON, 2);
+            setBinding(PA_LOOK_BACK, Input::IT_STICKBUTTON, 0);
+            Log::info("GamepadConfig", "Moved accelerate to cross and look "
+                "back to triangle on %s.", getName().c_str());
+        }
+    }
+#endif
     return ok;
 }   // load
 
@@ -116,6 +142,9 @@ void GamepadConfig::save (std::ofstream& stream)
            << "\" desensitize=\"" << m_desensitize
            << "\" auto-center=\"" << m_auto_center
            << "\" force-feedback=\"" << m_use_force_feedback << "\" ";
+#ifdef __vita__
+    stream << "vita-layout=\"" << VITA_LAYOUT_VERSION << "\" ";
+#endif
     DeviceConfig::save(stream);
     stream << "</gamepad>\n\n";
 }   // save
@@ -537,6 +566,14 @@ void GamepadConfig::initSDLMapping()
         setBindingFromTuple(PA_LOOK_BACK, actions_map.at(SDL_CONTROLLER_BUTTON_Y));
         // Split joycons will only have one minus button (left joycon)
         setBindingFromTuple(PA_RESCUE, actions_map.at(SDL_CONTROLLER_BUTTON_LEFTSTICK));
+#elif defined(__vita__)
+        // Cross accelerates and square brakes, like most kart racers on
+        // PlayStation consoles
+        setBindingFromTuple(PA_ACCEL, actions_map.at(SDL_CONTROLLER_BUTTON_A));
+        setBindingFromTuple(PA_BRAKE, actions_map.at(SDL_CONTROLLER_BUTTON_X));
+        setBindingFromTuple(PA_FIRE, actions_map.at(SDL_CONTROLLER_BUTTON_B));
+        setBindingFromTuple(PA_LOOK_BACK, actions_map.at(SDL_CONTROLLER_BUTTON_Y));
+        setBindingFromTuple(PA_RESCUE, actions_map.at(SDL_CONTROLLER_BUTTON_BACK));
 #else
         setBindingFromTuple(PA_ACCEL, actions_map.at(SDL_CONTROLLER_BUTTON_Y));
         setBindingFromTuple(PA_BRAKE, actions_map.at(SDL_CONTROLLER_BUTTON_X));
